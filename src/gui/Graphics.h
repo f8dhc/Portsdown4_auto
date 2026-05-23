@@ -306,7 +306,7 @@ void clearScreen()
 void setPixel(int x, int y, int R, int G, int B)
 {
   int p;  // Pixel Memory offset
-  if ((x < 800) && (y < 480))
+  if ((x < screenXsize) && (y < screenYsize))
   {
     p=(x + screenXsize * y) * 4;
 
@@ -344,7 +344,6 @@ void closeScreen(void)
 void setCursorPixel(int x, int y, int level)
 {
   int p;  // Pixel Memory offset
-  if ((x < 800) && (y < 480))
   {
     p=(x + screenXsize * y) * 4;
 
@@ -465,34 +464,34 @@ void draw_cursor2(int new_x, int new_y)
   }
 
   // Constrain to touchscreen
-  if (box_left > 799)
+  if (box_left > screenXsize - 1)
   {
-    box_left = 799;
+    box_left = screenXsize - 1;
   }
   if (box_left < 0)
   {
     box_left = 0;
   }
-  if (box_right > 799)
+  if (box_right > screenXsize - 1)
   {
-    box_right = 799;
+    box_right = screenXsize - 1;
   }
   if (box_right < 0)
   {
     box_right = 0;
   }
 
-  if (box_top > 479)
+  if (box_top > screenYsize - 1)
   {
-    box_top = 479;
+    box_top = screenYsize - 1;
   }
   if (box_top < 0)
   {
     box_top = 0;
   }
-  if (box_base > 479)
+  if (box_base > screenYsize - 1)
   {
-    box_base = 479;
+    box_base = screenYsize - 1;
   }
   if (box_base < 0)
   {
@@ -502,7 +501,7 @@ void draw_cursor2(int new_x, int new_y)
   // Calulate memory positions:
   x_start = 4 * box_left;
   x_width = 4 * (box_right - box_left);
-  y_start = 479 - box_top;
+  y_start = screenYsize - 1 - box_top;
   y_height = box_top - box_base;
 
   //printf ("oldx = %d, oldy = %d, newx = %d, newy = %d left = %d, right = %d, top = %d, base = %d\n", old_x, old_y, new_x, new_y, box_left, box_right, box_top, box_base);
@@ -518,7 +517,7 @@ void draw_cursor2(int new_x, int new_y)
   for (vert = 0; vert < 24; vert++)
   {
     ypixel = new_y - 24 + vert;
-    if ((ypixel >= 0) && (ypixel < 480))
+    if ((ypixel >= 0) && (ypixel < screenYsize))
     {
 
       for (horiz = 0; horiz < 18; horiz++)
@@ -528,31 +527,31 @@ void draw_cursor2(int new_x, int new_y)
         {
           if ((vert == 23) && (horiz >= 5) && (horiz < 8))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine0[horiz - 5]);
+            setCursorPixel(xpixel, screenYsize - 1 - ypixel, cursorLine0[horiz - 5]);
           }
           else if ((vert == 22) && (horiz >= 4) && (horiz < 9))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine1[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - 1 - ypixel, cursorLine1[horiz - 4]);
           }
           else if ((vert == 21) && (horiz >= 4) && (horiz < 9))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine2[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - 1 - ypixel, cursorLine2[horiz - 4]);
           }
           else if ((vert == 20) && (horiz >= 4) && (horiz < 9))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine3[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - 1 - ypixel, cursorLine3[horiz - 4]);
           }
           else if ((vert == 19) && (horiz >= 4) && (horiz < 9))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine4[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - 1 - ypixel, cursorLine4[horiz - 4]);
           }
           else if ((vert == 18) && (horiz >= 4) && (horiz < 10))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine5[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - 1 - ypixel, cursorLine5[horiz - 4]);
           }
           else if ((vert == 17) && (horiz >= 4) && (horiz < 13))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine6[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - 1 - ypixel, cursorLine6[horiz - 4]);
           }
           else if ((vert == 16) && (horiz >= 4) && (horiz < 16))
           {
