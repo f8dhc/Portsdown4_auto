@@ -230,7 +230,7 @@ void LargeText2 (int xpos, int ypos, int sizeFactor, char*s, const font_t *font_
 
 void rectangle(int xpos, int ypos, int xsize, int ysize, int r, int g, int b)
 {
-  // xpos and y pos are 0 to screensize (479 799).  (0, 0) is bottom left
+  // xpos and y pos are 0 to screensize (screenYsize 799).  (0, 0) is bottom left
   // xsize and ysize are 1 to 800 (x) or 480 (y)
   int x;     // pixel count
   int y;     // pixel count
@@ -251,7 +251,7 @@ void rectangle(int xpos, int ypos, int xsize, int ysize, int r, int g, int b)
     {
       for(y = 0; y < ysize; y++)  // Draw a vertical line
       {
-        p = (xpos + x + screenXsize * (479 - (ypos + y))) * 4;
+        p = (xpos + x + screenXsize * (screenYsize - (ypos + y))) * 4;
 
         memset(p + fbp,     b, 1);     // Blue
         memset(p + fbp + 1, g, 1);     // Green
@@ -287,7 +287,7 @@ void clearScreen()
 {
   int p;  // Pixel Memory offset
   int x;  // x pixel count, 0 - 799
-  int y;  // y pixel count, 0 - 479
+  int y;  // y pixel count, 0 - screenYsize
 
   for(y=0; y < screenYsize; y++)
   {
@@ -555,71 +555,71 @@ void draw_cursor2(int new_x, int new_y)
           }
           else if ((vert == 16) && (horiz >= 4) && (horiz < 16))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine7[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine7[horiz - 4]);
           }
           else if ((vert == 15) && (horiz >= 4) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine8[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine8[horiz - 4]);
           }
           else if ((vert == 14) && (horiz >= 1) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine9[horiz - 1]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine9[horiz - 1]);
           }
           else if ((vert == 13) && (horiz >= 0) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine10[horiz]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine10[horiz]);
           }
           else if ((vert == 12) && (horiz >= 0) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine11[horiz]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine11[horiz]);
           }
           else if ((vert == 11) && (horiz >= 0) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine12[horiz]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine12[horiz]);
           }
           else if ((vert == 10) && (horiz >= 0) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine13[horiz]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine13[horiz]);
           }
           else if ((vert == 9) && (horiz >= 1) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine14[horiz - 1]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine14[horiz - 1]);
           }
           else if ((vert == 8) && (horiz >= 2) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine15[horiz - 2]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine15[horiz - 2]);
           }
           else if ((vert == 7) && (horiz >= 2) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine16[horiz - 2]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine16[horiz - 2]);
           }
           else if ((vert == 6) && (horiz >= 3) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine17[horiz - 3]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine17[horiz - 3]);
           }
           else if ((vert == 5) && (horiz >= 4) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine18[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine18[horiz - 4]);
           }
           else if ((vert == 4) && (horiz >= 4) && (horiz < 18))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine19[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine19[horiz - 4]);
           }
           else if ((vert == 3) && (horiz >= 4) && (horiz < 17))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine20[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine20[horiz - 4]);
           }
           else if ((vert == 2) && (horiz >= 4) && (horiz < 17))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine21[horiz - 4]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine21[horiz - 4]);
           }
           else if ((vert == 1) && (horiz >= 5) && (horiz < 17))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine22[horiz - 5]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine22[horiz - 5]);
           }
           else if ((vert == 0) && (horiz >= 5) && (horiz < 17))
           {
-            setCursorPixel(xpixel, 479 - ypixel, cursorLine23[horiz - 5]);
+            setCursorPixel(xpixel, screenYsize - ypixel, cursorLine23[horiz - 5]);
           }
         }
       }
@@ -668,7 +668,7 @@ void draw_cursor_foreground(int x, int y)
 
   // Draws the cursor on the primary framebuffer
 
-  y = 479 - y;
+  y = screenYsize - y;
 
   for (vert = 0; vert < 24; vert++)
   {
@@ -683,99 +683,99 @@ void draw_cursor_foreground(int x, int y)
         {
           if ((vert == 23) && (horiz >= 5) && (horiz < 8))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine0[horiz - 5], cursorLine0[horiz - 5], cursorLine0[horiz - 5]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine0[horiz - 5], cursorLine0[horiz - 5], cursorLine0[horiz - 5]);
           }
           else if ((vert == 22) && (horiz >= 4) && (horiz < 9))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine1[horiz - 4], cursorLine1[horiz - 4], cursorLine1[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine1[horiz - 4], cursorLine1[horiz - 4], cursorLine1[horiz - 4]);
           }
           else if ((vert == 21) && (horiz >= 4) && (horiz < 9))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine2[horiz - 4], cursorLine2[horiz - 4], cursorLine2[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine2[horiz - 4], cursorLine2[horiz - 4], cursorLine2[horiz - 4]);
           }
           else if ((vert == 20) && (horiz >= 4) && (horiz < 9))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine3[horiz - 4], cursorLine3[horiz - 4], cursorLine3[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine3[horiz - 4], cursorLine3[horiz - 4], cursorLine3[horiz - 4]);
           }
           else if ((vert == 19) && (horiz >= 4) && (horiz < 9))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine4[horiz - 4], cursorLine4[horiz - 4], cursorLine4[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine4[horiz - 4], cursorLine4[horiz - 4], cursorLine4[horiz - 4]);
           }
           else if ((vert == 18) && (horiz >= 4) && (horiz < 10))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine5[horiz - 4], cursorLine5[horiz - 4], cursorLine5[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine5[horiz - 4], cursorLine5[horiz - 4], cursorLine5[horiz - 4]);
           }
           else if ((vert == 17) && (horiz >= 4) && (horiz < 13))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine6[horiz - 4], cursorLine6[horiz - 4], cursorLine6[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine6[horiz - 4], cursorLine6[horiz - 4], cursorLine6[horiz - 4]);
           }
           else if ((vert == 16) && (horiz >= 4) && (horiz < 16))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine7[horiz - 4], cursorLine7[horiz - 4], cursorLine7[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine7[horiz - 4], cursorLine7[horiz - 4], cursorLine7[horiz - 4]);
           }
           else if ((vert == 15) && (horiz >= 4) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine8[horiz - 4], cursorLine8[horiz - 4], cursorLine8[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine8[horiz - 4], cursorLine8[horiz - 4], cursorLine8[horiz - 4]);
           }
           else if ((vert == 14) && (horiz >= 1) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine9[horiz - 1], cursorLine9[horiz - 1], cursorLine9[horiz - 1]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine9[horiz - 1], cursorLine9[horiz - 1], cursorLine9[horiz - 1]);
           }
           else if ((vert == 13) && (horiz >= 0) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine10[horiz], cursorLine10[horiz], cursorLine10[horiz]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine10[horiz], cursorLine10[horiz], cursorLine10[horiz]);
           }
           else if ((vert == 12) && (horiz >= 0) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine11[horiz], cursorLine11[horiz], cursorLine11[horiz]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine11[horiz], cursorLine11[horiz], cursorLine11[horiz]);
           }
           else if ((vert == 11) && (horiz >= 0) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine12[horiz], cursorLine12[horiz], cursorLine12[horiz]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine12[horiz], cursorLine12[horiz], cursorLine12[horiz]);
           }
           else if ((vert == 10) && (horiz >= 0) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine13[horiz], cursorLine13[horiz], cursorLine13[horiz]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine13[horiz], cursorLine13[horiz], cursorLine13[horiz]);
           }
           else if ((vert == 9) && (horiz >= 1) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine14[horiz - 1], cursorLine14[horiz - 1], cursorLine14[horiz - 1]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine14[horiz - 1], cursorLine14[horiz - 1], cursorLine14[horiz - 1]);
           }
           else if ((vert == 8) && (horiz >= 2) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine15[horiz - 2], cursorLine15[horiz - 2], cursorLine15[horiz - 2]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine15[horiz - 2], cursorLine15[horiz - 2], cursorLine15[horiz - 2]);
           }
           else if ((vert == 7) && (horiz >= 2) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine16[horiz - 2], cursorLine16[horiz - 2], cursorLine16[horiz - 2]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine16[horiz - 2], cursorLine16[horiz - 2], cursorLine16[horiz - 2]);
           }
           else if ((vert == 6) && (horiz >= 3) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine17[horiz - 3], cursorLine17[horiz - 3], cursorLine17[horiz - 3]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine17[horiz - 3], cursorLine17[horiz - 3], cursorLine17[horiz - 3]);
           }
           else if ((vert == 5) && (horiz >= 4) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine18[horiz - 4], cursorLine18[horiz - 4], cursorLine18[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine18[horiz - 4], cursorLine18[horiz - 4], cursorLine18[horiz - 4]);
           }
           else if ((vert == 4) && (horiz >= 4) && (horiz < 18))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine19[horiz - 4], cursorLine19[horiz - 4], cursorLine19[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine19[horiz - 4], cursorLine19[horiz - 4], cursorLine19[horiz - 4]);
           }
           else if ((vert == 3) && (horiz >= 4) && (horiz < 17))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine20[horiz - 4], cursorLine20[horiz - 4], cursorLine20[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine20[horiz - 4], cursorLine20[horiz - 4], cursorLine20[horiz - 4]);
           }
           else if ((vert == 2) && (horiz >= 4) && (horiz < 17))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine21[horiz - 4], cursorLine21[horiz - 4], cursorLine21[horiz - 4]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine21[horiz - 4], cursorLine21[horiz - 4], cursorLine21[horiz - 4]);
           }
           else if ((vert == 1) && (horiz >= 5) && (horiz < 17))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine22[horiz - 5], cursorLine22[horiz - 5], cursorLine22[horiz - 5]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine22[horiz - 5], cursorLine22[horiz - 5], cursorLine22[horiz - 5]);
           }
           else if ((vert == 0) && (horiz >= 5) && (horiz < 17))
           {
-            setPixel(xpixel, 479 - ypixel, cursorLine23[horiz - 5], cursorLine23[horiz - 5], cursorLine23[horiz - 5]);
+            setPixel(xpixel, screenYsize - ypixel, cursorLine23[horiz - 5], cursorLine23[horiz - 5], cursorLine23[horiz - 5]);
           }
         }
       }
