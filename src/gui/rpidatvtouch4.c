@@ -47,8 +47,8 @@ Rewitten by Dave, G8GKQ
 #include "ffunc.h"
 #include "timing.h"
 
-#define KWHT  "\x1B[37m"
-#define KYEL  "\x1B[33m"
+#define KWHT  "\x1b[37m"
+#define KYEL  "\x1b[34m"
 
 #define PATH_PCONFIG "/home/pi/rpidatv/scripts/portsdown_config.txt"
 #define PATH_PPRESETS "/home/pi/rpidatv/scripts/portsdown_presets.txt"
@@ -68,7 +68,6 @@ Rewitten by Dave, G8GKQ
 #define PATH_SV_CONFIG "/home/pi/rpidatv/src/sdrplayview/sdrplayview_config.txt"
 #define PATH_TC_CONFIG "/home/pi/rpidatv/scripts/images/testcard_config.txt"
 #define PATH_HAMTV_CONFIG "/home/pi/rpidatv/scripts/merger_config.txt"
-#define PATH_TRACK_CONFIG "/home/pi/rpidatv/scripts/tracker_config.txt"
 
 #define PI 3.14159265358979323846
 #define deg2rad(DEG) ((DEG)*((PI)/(180.0)))
@@ -82,6 +81,9 @@ int wscreen, hscreen;
 float scaleXvalue, scaleYvalue;       // Coeff ratio from Screen/TouchArea
 int wbuttonsize;
 int hbuttonsize;
+
+char nom[] ="/home/pi/rpidatv/src/gui/journal.txt";
+FILE *jd;
 
 typedef struct {
 	int r,g,b;
@@ -110,7 +112,7 @@ color_t DGrey  = {.r = 63, .g = 63, .b = 63};
 color_t Red   = {.r = 255, .g = 0  , .b = 0  };
 color_t Black = {.r = 0  , .g = 0  , .b = 0  };
 
-#define MAX_BUTTON 840             // Top button on Menu 55 is 835
+#define MAX_BUTTON 800
 int IndexButtonInArray=0;
 button_t ButtonArray[MAX_BUTTON];
 #define TIME_ANTI_BOUNCE 500
@@ -161,7 +163,7 @@ int debug_level = 0; // 0 minimum, 1 medium, 2 max
 int MicLevel = 26;   // 1 to 30.  default 26
 
 char ScreenState[255] = "NormalMenu";  // NormalMenu SpecialMenu TXwithMenu TXwithImage RXwithImage VideoOut SnapView VideoView Snap SigGen
-char MenuTitle[56][127];
+char MenuTitle[50][127];
 
 // Band details to be over-written by values from from portsdown_config.txt:
 char TabBand[16][3] = {"d1", "d2", "d3", "d4", "d5", "t1", "t2", "t3", "t4", "t0", "t5", "t6", "t7", "t8", "d0", "d6"};
@@ -364,7 +366,8 @@ char static_router[63] = "192.168.0.1";
 char static_dns[63] = "192.168.0.1";
 
 // Touch display variables
-int Inversed=0;               //Display is inversed (Waveshare=1)
+int Inversed = 0;               //Display is inversed (Waveshare=1)
+int Identique = 0;              // Pour les écrans identiques
 int PresetStoreTrigger = 0;   //Set to 1 if awaiting preset being stored
 int FinishedButton = 0;       // Used to indicate screentouch during TX or RX
 int touch_response = 0;       // set to 1 on touch and used to reboot display if it locks up
@@ -382,7 +385,7 @@ bool webcontrol = false;               // Enables remote control of touchscreen 
 char ProgramName[255];                 // used to pass rpidatvgui char string to listener
 int *web_x_ptr;                        // pointer
 int *web_y_ptr;                        // pointer
-int web_x;                             // click x 0 - 799 from left
+int web_x;                             // click x 0 - screenXmax from left
 int web_y;                             // click y 0 - 480 from top
 bool webclicklistenerrunning = false;  // Used to only start thread if required
 char WebClickForAction[7] = "no";      // no/yes
@@ -390,8 +393,8 @@ bool touchscreen_present = true;       // detected on startup; used to control m
 bool reboot_required = false;          // used after hdmi display change
 bool mouse_active = false;             // set true after first movement of mouse
 bool MouseClickForAction = false;      // set true on left click of mouse
-int mouse_x;                           // click x 0 - 799 from left
-int mouse_y;                           // click y 0 - 479 from top
+int mouse_x;                           // click x 0 - screenXmax from left
+int mouse_y;                           // click y 0 - screenYmax from top
 bool image_complete = true;            // prevents mouse image buffer from being copied until image is complete
 bool mouse_connected = false;          // Set true if mouse detected at startup
 
@@ -414,20 +417,6 @@ char htAUport[63];                     // server port for merger region
 char htTESTport[63];                   // server port for merger region
 bool MergerConnected = false;          // true when connected
 
-// ISS Tracker variables
-int AzOffset = 0;                      // Az offset from tracker Pos
-int ElOffset = 0;                      // El offset from tracker Pos
-char TrackMode[15] = "stop";           // stop, moon, iss, sun, park
-float AzPark = 210.0;                  //
-float ElPark = 30.0;                   //
-char CtrlType[15] = "G5500pi";         // G5500pi, HamLib
-char flip[15] = "disabled";            // disabled, enabled, forced, half-flip
-char G5500piAddress[31] = "192.168.2.140:8008";
-char HamLibDevice[31] = "/dev/ttyUSB2";
-char HamLibModel[31] = "603";
-char HamLibBaud[7] = "9600";
-bool ISS_thread_running = false;       // Used to prevent multiple threads
-
 
 // Threads for Touchscreen monitoring
 
@@ -440,7 +429,6 @@ pthread_t thrfe15;          //  Turns LimeRFE on after 15 seconds
 pthread_t thbuttonFileVLC;  //  Handles touches during VLC play from file
 pthread_t thbuttonIQPlay;   //  Handles touches to stop IQ player
 pthread_t thmouse;          //  Listens to the mouse
-pthread_t thiss;            //  Refreshes the ISS tracker position on Menu 51
 
 // ************** Function Prototypes **********************************//
 
@@ -459,7 +447,6 @@ void GetIPAddr2(char IPAddress[256]);
 void Get_wlan0_IPAddr(char IPAddress[255]);
 void GetSWVers(char SVersion[256]);
 void GetLatestVers(char LatestVersion[256]);
-void GetMuntjacSerial(char MuntjacSerial[127]);
 int CheckPing(char *host_address);
 int CheckGoogle();
 int CheckJetson();
@@ -491,7 +478,6 @@ void ReadLangstone();
 void ReadTSConfig();
 void ReadADFRef();
 void ReadMerger();
-void ReadTracker();
 void GetSerNo(char SerNo[256]);
 int CalcTSBitrate();
 void GetDevices(char DeviceName1[256], char DeviceName2[256]);
@@ -548,7 +534,6 @@ int GetPlutoAD();
 int GetPlutoCPU();
 void CheckPlutoReady();
 void CheckLibreSDRReady();
-void CheckMuntjacReady();
 void CheckLimeReady();
 void LimeInfo();
 int LimeGWRev();
@@ -744,9 +729,6 @@ void ChangeJetsonUser();
 void ChangeJetsonPW();
 void ChangeJetsonRPW();
 void ChangeHamTV(int NoButton);
-void ChangeTracker(int NoButton);
-void *TrackDisplay(void * arg);
-int check_ISStracking_status();
 void waituntil(int w,int h);
 void Define_Menu1();
 void Start_Highlights_Menu1();
@@ -843,8 +825,6 @@ void Define_Menu47();
 void Start_Highlights_Menu47();
 void Define_Menu48();
 void Start_Highlights_Menu48();
-void Define_Menu51();
-void Start_Highlights_Menu51();
 void Define_Menu41();
 
 // **************************************************************************** //
@@ -883,7 +863,7 @@ void GetConfigParam(char *PathConfigFile, char *Param, char *Value)
     return;
   }
 
-  //printf("Get Config reads %s for %s ", PathConfigFile , Param);
+  // fprintf(jd, "Get Config reads %s for %s ", PathConfigFile , Param);
 
   FILE *fp=fopen(PathConfigFile, "r");
   if(fp != 0)
@@ -1365,49 +1345,6 @@ void GetLatestVers(char LatestVersion[256])
     //printf("%s", LatestVersion);
   }
 
-  /* close */
-  pclose(fp);
-}
-
-
-/***************************************************************************//**
- * @brief Looks up the Muntjac Firmware Version and Serial
- *
- * @param MuntjacSerial (str) Muntjac Firmware Version and Serial
- *
- * @return void
-*******************************************************************************/
-
-void GetMuntjacSerial(char MuntjacSerial[127])
-{
-  FILE *fp;
-  int i;
-
-  // Run the script for the serial, delete the CRs and the []
-  fp = popen("/home/pi/rpidatv/scripts/muntjac_serial.sh | tr -d \'\\n\' | tr -d \'[\'", "r");
-  if (fp == NULL) {
-    printf("Failed to run command\n" );
-    exit(1);
-  }
-
-  /* Read the output a line at a time - output it. */
-  while (fgets(MuntjacSerial, 80, fp) != NULL)
-  {
-    //printf("%s", (INTERACTIVE_MODE));
-  }
-
-  //  Terminate string at first space to delete " (INTERACTIVE_MODE)]"
-  for (i = 0; i < strlen(MuntjacSerial); i++)
-  {
-    if (MuntjacSerial[i] == ' ')
-    {
-      MuntjacSerial[i] = '\0';
-      break;
-    }
-  }
-
-  printf("Muntjac serial returned as %s\n", MuntjacSerial);
-  
   /* close */
   pclose(fp);
 }
@@ -3093,75 +3030,6 @@ void ReadMerger()
 
 
 /***************************************************************************//**
- * @brief Reads the ISS Tracker parameters from tracker_config.txt
- *        
- * @param nil
- *
- * @return void
-*******************************************************************************/
-void ReadTracker()
-{
-  char Param[31];
-  char Value[255]="";
-
-  strcpy(Value, "0");
-  strcpy(Param, "azoffset");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  AzOffset = atoi(Value);
-
-  strcpy(Value, "0");
-  strcpy(Param, "eloffset");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  ElOffset = atoi(Value);
-
-  strcpy(Value, "stop");
-  strcpy(Param, "trackmode");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  strcpy(TrackMode, Value);
-
-  strcpy(Value, "180.0");
-  strcpy(Param, "azpark");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  AzPark = atof(Value);
-
-  strcpy(Value, "0.0");
-  strcpy(Param, "elpark");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  ElPark = atof(Value);
-
-  strcpy(Value, "disabled");
-  strcpy(Param, "flip");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  strcpy(flip, Value);
-
-  strcpy(Value, "G5500pi");
-  strcpy(Param, "ctrltype");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  strcpy(CtrlType, Value);
-
-  strcpy(Value, "192.168.2.140:8008");
-  strcpy(Param, "g5500piaddress");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  strcpy(G5500piAddress, Value);
-
-  strcpy(Value, "/dev/ttyUSB2");
-  strcpy(Param, "hamlibdevice");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  strcpy(HamLibDevice, Value);
-
-  strcpy(Value, "603");
-  strcpy(Param, "hamlibmodel");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  strcpy(HamLibModel, Value);
-
-  strcpy(Value, "9600");
-  strcpy(Param, "hamlibbaud");
-  GetConfigParam(PATH_TRACK_CONFIG, Param, Value);
-  strcpy(HamLibBaud, Value);
-}
-
-
-/***************************************************************************//**
  * @brief Looks up the SD Card Serial Number
  *
  * @param SerNo (str) Serial Number to be passed as a string
@@ -3806,6 +3674,7 @@ int CheckLangstonePlutoIP()
 }
 
 
+
 /***************************************************************************//**
  * @brief Initialises all the GPIOs at startup
  *
@@ -3835,7 +3704,6 @@ void InitialiseGPIO()
   pinMode(GPIO_Tverter, OUTPUT);
   digitalWrite(GPIO_Tverter, LOW);
 }
-
 
 /***************************************************************************//**
  * @brief Reads the Presets from portsdown_presets.txt and formats them for
@@ -4013,7 +3881,6 @@ int RegisterMuntjac()
   char GrepCommand[127];
   char GrepResponse[255];
   char AppendCommand[300];
-  char CopyCommand[511];
 
   if (CheckMuntjac() == 1)
   {
@@ -4036,10 +3903,6 @@ int RegisterMuntjac()
   }
 
   pclose(fp);
-
-  // Copy Muntjac cal file from source folder to bin folder
-  snprintf(CopyCommand, 500, "cp /home/pi/rpidatv/src/muntjac/cal_files/%s.mjo /home/pi/rpidatv/bin/%s.mjo >/dev/null 2>/dev/null", MuntjacSerial, MuntjacSerial);
-  system(CopyCommand);
 
   // Check if Muntjac serial is already in /etc/udev/rules.d/99-usbserial.rules
 
@@ -5900,78 +5763,6 @@ void CheckLibreSDRReady()
 
 
 /***************************************************************************//**
- * @brief Checks whether a Muntjac is connected and registered if selected
- *        and displays error message if not
- * @param 
- *
- * @return void
-*******************************************************************************/
-
-void CheckMuntjacReady()
-{
-  char MuntjacSerial[127];
-  char GrepCommand[255];
-  char GrepResponse[255];
-  bool serial_present = false;
-  FILE *fp;
-
-  if (strcmp(CurrentModeOP, TabModeOP[11]) == 0)  // Muntjac Output selected
-  {
-    if (CheckMuntjac() == 1)
-    {
-      MsgBox4("No Muntjac Detected", "Check connections", "or select another output device.", "Touch Screen to Continue");
-      wait_touch();
-    }
-    else                                          // Muntjac connected, so check that it is registered
-    {
-      // Check if Muntjac serial is already in /etc/udev/rules.d/99-usbserial.rules
-
-      // Look up Muntjac Pico Serial Number
-      fp = popen("dmesg | grep -A4 'idVendor=2e8a, idProduct=000a' | tail --lines=1 | sed -n -e 's/^.*SerialNumber: //p'", "r");
-      if (fp == NULL)
-      {
-        printf("Failed to run command\n" );
-        return;
-      }
-
-      // Read the output a line at a time - output it
-      while (fgets(MuntjacSerial, sizeof(MuntjacSerial) - 1, fp) != NULL)
-      {
-        MuntjacSerial[strlen(MuntjacSerial) - 1] = '\0';
-        //printf("\n Muntjac Serial is -%s-\n\n", MuntjacSerial );
-      }
-
-      pclose(fp);
-
-      snprintf(GrepCommand, 250, "grep %s /etc/udev/rules.d/99-usbserial.rules", MuntjacSerial);
-
-      fp = popen(GrepCommand, "r");
-      if (fp == NULL)
-      {
-        printf("Failed to run command\n" );
-        return;
-      }
-
-      // Read the output a line at a time - output it
-      while (fgets(GrepResponse, sizeof(GrepResponse) - 1, fp) != NULL)
-      {
-        if (strlen(GrepResponse) > 5)
-        {
-          // The serial is registered
-          serial_present = true;
-        }
-      }
-
-      if (serial_present != true)
-      {
-        MsgBox4("Muntjac Detected but", "not registered.", "Reselect Muntjac in \"Output to\" Menu", "Touch Screen to Continue");
-      }
-    }
-  }
-}
-
-
-/***************************************************************************//**
  * @brief Checks whether a Lime Mini or Lime USB is connected if selected
  *        and displays error message if not
  * @param 
@@ -6013,7 +5804,6 @@ void CheckLimeReady()
     }
   }
 }
-
 
 /***************************************************************************//**
  * @brief Displays Info about a connected Lime
@@ -6626,12 +6416,15 @@ void *WaitButtonFileVLC(void * arg)
 
   while (FinishedButton == 1)
   {
-    while(getTouchSample(&rawX, &rawY, &rawPressure)==0);  // Wait here for touch
+    while(getTouchSample(&rawX, &rawY, &rawPressure)==0);
+    // Wait here for touch
 
-    TransformTouchMap(rawX, rawY);  // Sorts out orientation and approx scaling of the touch map
+    TransformTouchMap(rawX, rawY);
+    // Sorts out orientation and approx scaling of the touch map
 
-    if((scaledX <= 5 * wscreen / 40)  &&  (scaledY <= 2 * hscreen / 12)) // Bottom left
-    {
+    if((scaledX <= 5 * wscreen / 40)  &&
+       (scaledY <= 2 * hscreen / 12)) {
+      // Bottom left
       printf("In snap zone, so take snap.\n");
       system("/home/pi/rpidatv/scripts/snap2.sh");
     }
@@ -7464,8 +7257,7 @@ void ListNetPis()
  * @return void
 *******************************************************************************/
 
-void DisplayLogo()
-{
+void DisplayLogo() {
   system("sudo fbi -T 1 -noverbose -a \"/home/pi/rpidatv/scripts/images/BATC_Black.png\" >/dev/null 2>/dev/null");
   UpdateWeb();
   refreshMouseBackground();
@@ -7474,8 +7266,7 @@ void DisplayLogo()
 }
 
 
-void TransformTouchMap(int x, int y)
-{
+void TransformTouchMap(int x, int y) {
   // This function takes the raw (0 - 4095 on each axis) touch data x and y
   // and transforms it to approx 0 - wscreen and 0 - hscreen in globals scaledX 
   // and scaledY 
@@ -7483,74 +7274,73 @@ void TransformTouchMap(int x, int y)
   int shiftX, shiftY;
   double factorX, factorY;
 
-  if (touchscreen_present == true)      // Touchscreen
-  {
+  if (touchscreen_present == true) {     // Touchscreen
     // Adjust registration of touchscreen for Waveshare
-    shiftX=30; // move touch sensitive position left (-) or right (+).  Screen is 700 wide
-    shiftY=-5; // move touch sensitive positions up (-) or down (+).  Screen is 480 high
+    shiftX = 30;
+    // move touch sensitive position left (-) or right (+).  Screen is 700 wide
+    shiftY = -5;
+    // move touch sensitive positions up (-) or down (+).  Screen is 480 high
 
-    factorX=-0.4;  // expand (+) or contract (-) horizontal button space from RHS. Screen is 5.6875 wide
-    factorY=-0.3;  // expand or contract vertical button space.  Screen is 8.53125 high
+    factorX = -0.4;
+    // expand (+) or contract (-) horizontal button space from RHS.
+    // Screen is 5.6875 wide
+    factorY = -0.3;
+    // expand or contract vertical button space.
+    // Screen is 8.53125 high
 
     // Switch axes for normal and waveshare displays
-    if(Inversed==0) // Tontec35 or Element14_7
-    {
-      scaledX = x/scaleXvalue;
-      scaledY = hscreen-y/scaleYvalue;
+    if (Inversed == 0) {  // Tontec35 or Element14_7
+      if (Identique) {
+	scaledX = wscreen - x;
+	scaledY = y; }
+      else {	
+	scaledX = x / scaleXvalue;
+	scaledY = hscreen - y / scaleYvalue; }}
+    else { //Waveshare (inversed)
+      scaledX = shiftX + wscreen - y / (scaleXvalue + factorX);
+      if(strcmp(DisplayType, "Waveshare4") != 0) {
+	//Check for Waveshare 4 inch
+        scaledY = shiftY + hscreen - x / (scaleYvalue + factorY); }
+      else { // Waveshare 4 inch display so flip vertical axis
+        scaledY = shiftY + x / (scaleYvalue + factorY);
+	// Vertical flip for 4 inch screen
+      } } }
+  else {   // Browser control without touchscreen
     }
-    else //Waveshare (inversed)
-    {
-      scaledX = shiftX+wscreen-y/(scaleXvalue+factorX);
-
-      if(strcmp(DisplayType, "Waveshare4") != 0) //Check for Waveshare 4 inch
-      {
-        scaledY = shiftY+hscreen-x/(scaleYvalue+factorY);
-      }
-      else  // Waveshare 4 inch display so flip vertical axis
-      {
-        scaledY = shiftY+x/(scaleYvalue+factorY); // Vertical flip for 4 inch screen
-      }
-    }
-  }
-  else                                         // Browser control without touchscreen
-  {
-    scaledX = x;
-    scaledY = 480 - y;
-  }
+  //
+  fprintf(jd, "X %d Y %d en %d %d pour %s %s\n",
+	  x, y, scaledX, scaledY, DisplayType,
+	  (Inversed == 0)?"non inversé":"inversé");
 }
-
 
 int IsMenuButtonPushed(int x,int y)
 {
   int  i, NbButton, cmo, cmsize;
   NbButton = -1;
-  int margin=10;  // was 20
+  int margin = 10;  // was 20
   cmo = ButtonNumber(CurrentMenu, 0); // Current Menu Button number Offset
   cmsize = ButtonNumber(CurrentMenu + 1, 0) - ButtonNumber(CurrentMenu, 0);
   TransformTouchMap(x,y);       // Sorts out orientation and approx scaling of the touch map
 
-  //printf("x=%d y=%d scaledx %d scaledy %d sxv %f syv %f Button %d\n",x,y,scaledX,scaledY,scaleXvalue,scaleYvalue, NbButton);
+  //
+  fprintf(jd, "x=%d y=%d scaledx %d scaledy %d sxv %f syv %f Button %d\n",
+	  x, y, scaledX, scaledY, scaleXvalue, scaleYvalue, NbButton);
 
   // For each button in the current Menu, check if it has been pushed.
   // If it has been pushed, return the button number.  If nothing valid has been pushed return -1
   // If it has been pushed, do something with the last event time
 
-  for (i = 0; i <cmsize; i++)
-  {
-    if (ButtonArray[i + cmo].IndexStatus > 0)  // If button has been defined
-    {
-      //printf("Button %d, ButtonX = %d, ButtonY = %d\n", i, ButtonArray[i + cmo].x, ButtonArray[i + cmo].y);
+  for (i = 0; i <cmsize; i++) {
+    if (ButtonArray[i + cmo].IndexStatus > 0) {  // If button has been defined
+      // fprintf(jd, "Button %d, ButtonX = %d, ButtonY = %d\n", i, ButtonArray[i + cmo].x, ButtonArray[i + cmo].y);
 
       if  ((scaledX <= (ButtonArray[i + cmo].x + ButtonArray[i + cmo].w - margin))
-        && (scaledX >= ButtonArray[i + cmo].x + margin)
-        && (scaledY <= (ButtonArray[i + cmo].y + ButtonArray[i + cmo].h - margin))
-        && (scaledY >= ButtonArray[i + cmo].y + margin))  // and touched
-      {
+	   && (scaledX >= ButtonArray[i + cmo].x + margin)
+	   && (scaledY <= (ButtonArray[i + cmo].y + ButtonArray[i + cmo].h - margin))
+	   && (scaledY >= ButtonArray[i + cmo].y + margin)) {  // and touched
         NbButton = i;          // Set the button number to return
         break;                 // Break out of loop as button has been found
-      }
-    }
-  }
+      } } }
   return NbButton;
 }
 
@@ -7558,7 +7348,7 @@ int IsImageToBeChanged(int x,int y)
 {
   // Returns -1 for LHS touch, 0 for centre and 1 for RHS
 
-  TransformTouchMap(x,y);       // Sorts out orientation and approx scaling of the touch map
+ TransformTouchMap(x,y);       // Sorts out orientation and approx scaling of the touch map
 
   //if (scaledY >= hscreen/2)
   //{
@@ -7583,10 +7373,8 @@ int InitialiseButtons()
   // Writes 0 to IndexStatus of each button to signify that it should not
   // be displayed.  As soon as a status (text and color) is added, IndexStatus > 0
   int i;
-  for (i = 0; i <= MAX_BUTTON; i = i + 1)
-  {
-    ButtonArray[i].IndexStatus = 0;
-  }
+  for (i = 0; i <= MAX_BUTTON; i = i + 1) {
+    ButtonArray[i].IndexStatus = 0; }
   return 1;
 }
 
@@ -7596,39 +7384,26 @@ int ButtonNumber(int MenuIndex, int Button)
   // Returns the Button Number (0 - 794) from the Menu number and the button position
   int ButtonNumb = 0;
 
-  if (MenuIndex <= 10)  // 10 x 25-button main menus (250)
-  {
-    ButtonNumb = (MenuIndex - 1) * 25 + Button;
-  }
-  if ((MenuIndex >= 11) && (MenuIndex <= 40))  // 30 x 10-button submenus (250 + 300 = 550)
-  {
+  if (MenuIndex <= 10)  // 10 x 25-button main menus
+    ButtonNumb = (MenuIndex - 1) * 25 + Button;  
+  if ((MenuIndex >= 11) && (MenuIndex <= 40))  // 30 x 10-button submenus
     ButtonNumb = 250 + (MenuIndex - 11) * 10 + Button;
-  }
-  if ((MenuIndex >= 41) && (MenuIndex <= 41))  // keyboard (550 + 50 = 600)
-  {
+  if ((MenuIndex >= 41) && (MenuIndex <= 41))  // keyboard
     ButtonNumb = 550 + (MenuIndex - 41) * 50 + Button;
-  }
-  if ((MenuIndex >= 42) && (MenuIndex <= 50)) // 9 x 15-button submenus (600 + 135 = 735)
-  {
+  if (MenuIndex >= 42)  // 7 x 15-button submenus
     ButtonNumb = 600 + (MenuIndex - 42) * 15 + Button;
-  }
-  if ((MenuIndex >= 51) && (MenuIndex <= 55)) // 5 x 20-button submenus (735 + 100 = 835)
-  {
-    ButtonNumb = 735 + (MenuIndex - 51) * 20 + Button;
-  }
   return ButtonNumb;
 }
 
 int CreateButton(int MenuIndex, int ButtonPosition)
 {
-  // Provide Menu number (int 1 - 45), Button Position (0 bottom left, 23 top right)
+  // Provide Menu number (int 1 - 47), Button Position (0 bottom left, 23 top right)
   // return button number
 
   // Menus 1 - 10 are classic 25-button menus
   // Menus 11 - 40 are 10-button menus
   // Menu 41 is a keyboard
-  // Menus 42 - 50 are 15-button menus
-  // Menus 51 - 55 are 20-button menus
+  // Menus 42 - 47 are 15-button menus
 
   int ButtonIndex;
   int x = 0;
@@ -7638,146 +7413,132 @@ int CreateButton(int MenuIndex, int ButtonPosition)
 
   ButtonIndex = ButtonNumber(MenuIndex, ButtonPosition);
 
-  if ((MenuIndex != 41) && (MenuIndex != 8))  // All except keyboard and RX Menu
-  {
-    if (ButtonPosition < 20)  // Bottom 4 rows
-    {
-      x = (ButtonPosition % 5) * wbuttonsize + 20;  // % operator gives the remainder of the division
+  if ((MenuIndex != 41) &&
+      (MenuIndex != 8)) { // All except keyboard and RX Menu
+    
+    if (ButtonPosition < 20) { // Bottom 4 rows
+      x = (ButtonPosition % 5) * wbuttonsize + 20;
       y = (ButtonPosition / 5) * hbuttonsize + 20;
       w = wbuttonsize * 0.9;
-      h = hbuttonsize * 0.9;
-    }
-    else if (ButtonPosition == 20)  // TX button
-    {
-      x = (ButtonPosition % 5) * wbuttonsize *1.7 + 20;    // % operator gives the remainder of the division
+      h = hbuttonsize * 0.9;  }
+    else
+      if (ButtonPosition == 20) { // TX button
+      x = (ButtonPosition % 5) * wbuttonsize * 1.7 + 20;
       y = (ButtonPosition / 5) * hbuttonsize + 20;
       w = wbuttonsize * 1.2;
-      h = hbuttonsize * 1.2;
-    }
-    else if ((ButtonPosition == 21) || (ButtonPosition == 22) || (ButtonPosition == 23)) // RX/M1, M2 and M3 buttons
-    {
-      x = ((ButtonPosition + 1) % 5) * wbuttonsize + 20;  // % operator gives the remainder of the division
-      y = (ButtonPosition / 5) * hbuttonsize + 20;
-      w = wbuttonsize * 0.9;
-      h = hbuttonsize * 1.2;
-    }
-  }
-  else if (MenuIndex == 8)  // RX Menu
-  {
-    if (ButtonPosition < 15)  // Bottom 3 rows
-    {
-      x = (ButtonPosition % 5) * wbuttonsize + 20;  // % operator gives the remainder of the division
-      y = (ButtonPosition / 5) * hbuttonsize + 20;
-      w = wbuttonsize * 0.9;
-      h = hbuttonsize * 0.9;
-    }
-    if ((ButtonPosition >= 15) && (ButtonPosition < 21))  // SR Buttons (6)
-    {
-      x = (ButtonPosition - 15) * 0.83 * wbuttonsize + 20;  // % operator gives the remainder of the division
-      y = 3 * hbuttonsize + 20;
-      w = wbuttonsize * 0.75;
-      h = hbuttonsize * 0.9;
-    }
-    else if (ButtonPosition == 21)  // QO-100/T button
-    {
-      x = ((ButtonPosition - 1) % 5) * wbuttonsize * 1.7 + 20;    // % operator gives the remainder of the division
-      y = ((ButtonPosition - 1) / 5) * hbuttonsize + 20;
-      w = wbuttonsize * 1.2;
-      h = hbuttonsize * 1.2;
-    }
-    else if ((ButtonPosition == 22) || (ButtonPosition == 23) || (ButtonPosition == 24)) // Exit, Config and [blank] buttons
-    {
-      x = ((ButtonPosition ) % 5) * wbuttonsize + 20;  // % operator gives the remainder of the division
-      y = ((ButtonPosition - 1) / 5) * hbuttonsize + 20;
-      w = wbuttonsize * 0.9;
-      h = hbuttonsize * 1.2;
-    }
-  }
-  else  // Keyboard
-  {
-    w = 65;
-    h = 59;
+      h = hbuttonsize * 1.2; }
+      else
+	if ((ButtonPosition == 21) ||
+	    (ButtonPosition == 22) ||
+	    (ButtonPosition == 23)) { // RX/M1, M2 and M3 buttons
+	  x = ((ButtonPosition + 1) % 5) * wbuttonsize + 20;
+	  y = (ButtonPosition / 5) * hbuttonsize + 20;
+	  w = wbuttonsize * 0.9;
+	  h = hbuttonsize * 1.2; }  }
+  else
+    if (MenuIndex == 8) {  // RX Menu
+      if (ButtonPosition < 15) { // Bottom 3 rows
+	x = (ButtonPosition % 5) * wbuttonsize + 20;
+	y = (ButtonPosition / 5) * hbuttonsize + 20;
+	w = wbuttonsize * 0.9;
+	h = hbuttonsize * 0.9;  }
+      if ((ButtonPosition >= 15) &&
+	  (ButtonPosition < 21)) {  // SR Buttons (6)
+	x = (ButtonPosition - 15) * 0.83 * wbuttonsize + 20;
+	y = 3 * hbuttonsize + 20;
+	w = wbuttonsize * 0.75;
+	h = hbuttonsize * 0.9; }
+      else
+	if (ButtonPosition == 21) {  // QO-100/T button
+	  x = ((ButtonPosition - 1) % 5) * wbuttonsize * 1.7 + 20;
+	  y = ((ButtonPosition - 1) / 5) * hbuttonsize + 20;
+	  w = wbuttonsize * 1.2;
+	  h = hbuttonsize * 1.2;  }
+	else
+	  if ((ButtonPosition == 22) ||
+	      (ButtonPosition == 23) ||
+	      (ButtonPosition == 24)) {  // Exit, Config and [blank] buttons
+	    x = ((ButtonPosition ) % 5) * wbuttonsize + 20;
+	    y = ((ButtonPosition - 1) / 5) * hbuttonsize + 20;
+	    w = wbuttonsize * 0.9;
+	    h = hbuttonsize * 1.2;  } }
+    else {  // Keyboard
+      w = 65;
+      h = 59;
 
-    if (ButtonPosition <= 9)  // Space bar and < > - Enter, Bkspc
-    {
-      switch (ButtonPosition)
-      {
-      case 0:                   // Space Bar
+      if (ButtonPosition <= 9) {  // Space bar and < > - Enter, Bkspc
+	switch (ButtonPosition)  {
+	case 0:                   // Space Bar
           y = 0;
-          x = 165; // wscreen * 5 / 24;
-          w = 362; // wscreen * 11 /24;
+          x = wscreen * 5 / 24;
+          w = wscreen * 11 /24;
           break;
-      case 1:                  // Not used
+	case 1:                  // Not used
           y = 0;
-          x = 528; //wscreen * 8 / 12;
+          x = wscreen * 8 / 12;
           break;
-      case 2:                  // <
+	case 2:                  // <
           y = 0;
-          x = 594; //wscreen * 9 / 12;
+          x = wscreen * 9 / 12;
           break;
-      case 3:                  // >
+	case 3:                  // >
           y = 0;
-          x = 660; // wscreen * 10 / 12;
+          x = wscreen * 10 / 12;
           break;
-      case 4:                  // -
+	case 4:                  // -
           y = 0;
-          x = 726; // wscreen * 11 / 12;
+          x = wscreen * 11 / 12;
           break;
-      case 5:                  // Clear
+	case 5:                  // Clear
           y = 0;
           x = 0;
-          w = 131; // 2 * wscreen/12;
+          w = 2 * wscreen / 12;
           break;
-      case 6:                 // Left Shift
-          y = hscreen/8;
+	case 6:                 // Left Shift
+          y = hscreen / 8;
           x = 0;
           break;
-      case 7:                 // Right Shift
-          y = hscreen/8;
-          x = 726; // wscreen * 11 / 12;
+	case 7:                 // Right Shift
+          y = hscreen / 8;
+          x = wscreen * 11 / 12;
           break;
-      case 8:                 // Enter
-          y = 2 * hscreen/8;
-          x = 660; // wscreen * 10 / 12;
-          w = 131; // 2 * wscreen/12;
+	case 8:                 // Enter
+          y = 2 * hscreen / 8;
+          x = wscreen * 10 / 12;
+          w = 2 * wscreen / 12;
           h = 119;
           break;
-      case 9:                 // Backspace
+	case 9:                 // Backspace
           y = 4 * hscreen / 8;
-          x = 693; // wscreen * 21 / 24;
-          w = 98; // 3 * wscreen/24;
+          x = wscreen * 21 / 24;
+          w = 3 * wscreen / 24;
           break;
-      }
-    }
-    if ((ButtonPosition >= 10) && (ButtonPosition <= 19))  // ZXCVBNM,./
-    {
-      y = hscreen/8;
-      x = (ButtonPosition - 9) * 66;
-    }
-    if ((ButtonPosition >= 20) && (ButtonPosition <= 29))  // ASDFGHJKL
-    {
+	} }
+    if ((ButtonPosition >= 10) &&
+	(ButtonPosition <= 19))  { // ZXCVBNM,./
+      y = hscreen / 8; 
+      x = (ButtonPosition - 9) * 66; }
+    if ((ButtonPosition >= 20) &&
+	(ButtonPosition <= 29))  {  // ASDFGHJKL
       y = 2 * hscreen / 8;
-      x = ((ButtonPosition - 19) * 66) - 33;
-    }
-    if ((ButtonPosition >= 30) && (ButtonPosition <= 39))  // QWERTYUIOP
-    {
+      x = ((ButtonPosition - 19) * 66) - 33; }
+    if ((ButtonPosition >= 30) &&
+	(ButtonPosition <= 39)) {  // QWERTYUIOP
       y = 3 * hscreen / 8;
-      x = (ButtonPosition - 30) * 66;
-    }
-    if ((ButtonPosition >= 40) && (ButtonPosition <= 49))  // 1234567890
-    {
+      x = (ButtonPosition - 30) * 66; }
+    if ((ButtonPosition >= 40) &&
+	(ButtonPosition <= 49)) {  // 1234567890
       y = 4 * hscreen / 8;
-      x = ((ButtonPosition - 39) * 66) - 33;
-    }
+      x = ((ButtonPosition - 39) * 66) - 33; }
   }
 
   button_t *NewButton=&(ButtonArray[ButtonIndex]);
-  NewButton->x=x;
-  NewButton->y=y;
-  NewButton->w=w;
-  NewButton->h=h;
-  NewButton->NoStatus=0;
-  NewButton->IndexStatus=0;
+  NewButton->x = x;
+  NewButton->y = y;
+  NewButton->w = w;
+  NewButton->h = h;
+  NewButton->NoStatus = 0;
+  NewButton->IndexStatus = 0;
 
   return (ButtonIndex);
 }
@@ -7799,7 +7560,7 @@ void AmendButtonStatus(int ButtonIndex, int ButtonStatusIndex, char *Text, color
 
 void DrawButton(int ButtonIndex)
 {
-  button_t *Button=&(ButtonArray[ButtonIndex]);
+  button_t *Button = &(ButtonArray[ButtonIndex]);
   char label[255];
   char line1[15];
   char line2[15];
@@ -7873,30 +7634,26 @@ void DrawButton(int ButtonIndex)
 
 void SetButtonStatus(int ButtonIndex,int Status)
 {
-  button_t *Button=&(ButtonArray[ButtonIndex]);
-  Button->NoStatus=Status;
+  button_t *Button = &(ButtonArray[ButtonIndex]);
+  Button->NoStatus = Status;
 }
 
-int GetButtonStatus(int ButtonIndex)
-{
-  button_t *Button=&(ButtonArray[ButtonIndex]);
+int GetButtonStatus(int ButtonIndex) {
+  button_t *Button = &(ButtonArray[ButtonIndex]);
   return Button->NoStatus;
 }
 
-int openTouchScreen(int NoDevice)
-{
+int openTouchScreen(int NoDevice) {
   char sDevice[255];
 
   sprintf(sDevice, "/dev/input/event%d", NoDevice);
   if(fd != 0) close(fd);
-  if ((fd = open(sDevice, O_RDONLY)) > 0)
-  {
-    return 1;
-  }
-  else
-  {
-    return 0;
-  }
+  if ((fd = open(sDevice, O_RDONLY)) > 0)  {
+    //
+    fprintf(jd, "\nÉcran tactile actif\n");
+    return 1;  }
+  else  {
+    return 0;  }
 }
 
 /*
@@ -7920,6 +7677,39 @@ Supported events:
      Max      255
 */
 
+/*
+Input device name: "raspberrypi-ts"
+Supported events:
+  Event type 0 (Sync)
+  Event type 1 (Key)
+    Event code 330 (Touch)
+  Event type 3 (Absolute)
+    Event code 0 (X)
+     Value    743
+     Min        0
+     Max      799
+    Event code 1 (Y)
+     Value    425
+     Min        0
+     Max      479
+    Event code 47 (?)
+     Value      0
+     Min        0
+     Max        9
+    Event code 53 (Position X)
+     Value      0
+     Min        0
+     Max      799
+    Event code 54 (Position Y)
+     Value      0
+     Min        0
+     Max      479
+    Event code 57 (Tracking ID)
+     Value      0
+     Min        0
+     Max    65535
+*/
+
 int getTouchScreenDetails(int *screenXmin,int *screenXmax,int *screenYmin,int *screenYmax)
 {
   unsigned long bit[EV_MAX][NBITS(KEY_MAX)];
@@ -7927,11 +7717,15 @@ int getTouchScreenDetails(int *screenXmin,int *screenXmax,int *screenYmin,int *s
   int abs[6] = {0};
 
   ioctl(fd, EVIOCGNAME(sizeof(name)), name);
-  //printf("Input device name: \"%s\"\n", name);
+  if (strcmp(name, "raspberry-ts") != 0)
+    Identique = 1;
+  
+  //
+  fprintf(jd, "Input device name: \"%s\"\n", name);
 
   memset(bit, 0, sizeof(bit));
   ioctl(fd, EVIOCGBIT(0, EV_MAX), bit[0]);
-  //printf("Supported events:\n");
+  // fprintf(jd, "Supported events:\n");
 
   int i,j,k;
   int IsAtouchDevice=0;
@@ -7939,40 +7733,31 @@ int getTouchScreenDetails(int *screenXmin,int *screenXmax,int *screenYmin,int *s
   {
     if (test_bit(i, bit[0]))
     {
-      //printf("  Event type %d (%s)\n", i, events[i] ? events[i] : "?");
-      if (!i) continue;
+      // fprintf(jd, "  Event type %d (%s)\n", i, events[i] ? events[i] : "?");
+      if (!i)
+	continue;
       ioctl(fd, EVIOCGBIT(i, KEY_MAX), bit[i]);
-      for (j = 0; j < KEY_MAX; j++)
-      {
-        if (test_bit(j, bit[i]))
-        {
-          //printf("    Event code %d (%s)\n", j, names[i] ? (names[i][j] ? names[i][j] : "?") : "?");
-          if(j==330) IsAtouchDevice=1;
-          if (i == EV_ABS)
-          {
+      for (j = 0; j < KEY_MAX; j++) {
+        if (test_bit(j, bit[i])) {
+          // fprintf(jd, "    Event code %d (%s)\n", j, names[i] ? (names[i][j] ? names[i][j] : "?") : "?");
+          if(j == 330)
+	    IsAtouchDevice=1;
+          if (i == EV_ABS) {
             ioctl(fd, EVIOCGABS(j), abs);
-            for (k = 0; k < 5; k++)
-            {
-              if ((k < 3) || abs[k])
-              {
-                //printf("     %s %6d\n", absval[k], abs[k]);
-                if (j == 0)
-                {
-                  if ((strcmp(absval[k],"Min  ")==0)) *screenXmin =  abs[k];
-                  if ((strcmp(absval[k],"Max  ")==0)) *screenXmax =  abs[k];
-                }
-                if (j == 1)
-                {
-                  if ((strcmp(absval[k],"Min  ")==0)) *screenYmin =  abs[k];
-                  if ((strcmp(absval[k],"Max  ")==0)) *screenYmax =  abs[k];
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+            for (k = 0; k < 5; k++) {
+              if ((k < 3) || abs[k]) {
+                // fprintf(jd, "     %s %6d\n", absval[k], abs[k]);
+                if (j == 0) {
+                  if ((strcmp(absval[k],"Min  ") == 0))
+		    *screenXmin =  abs[k];
+                  if ((strcmp(absval[k],"Max  ") == 0))
+		    *screenXmax =  abs[k]; }
+                if (j == 1) {
+                  if ((strcmp(absval[k],"Min  ") == 0))
+		    *screenYmin =  abs[k];
+                  if ((strcmp(absval[k],"Max  ") == 0))
+		    *screenYmax =  abs[k];
+    } } } } } } } }
   return IsAtouchDevice;
 }
 
@@ -7983,12 +7768,10 @@ int getTouchSampleThread(int *rawX, int *rawY, int *rawPressure)
   static bool awaitingtouchstart;
   static bool touchfinished;
 
-  if (touchneedsinitialisation == true)
-  {
+  if (touchneedsinitialisation == true) {
     awaitingtouchstart = true;
     touchfinished = true;
-    touchneedsinitialisation = false;
-  }
+    touchneedsinitialisation = false;  }
 
   /* how many bytes were read */
   size_t rb;
@@ -7996,9 +7779,10 @@ int getTouchSampleThread(int *rawX, int *rawY, int *rawPressure)
   /* the events (up to 64 at once) */
   struct input_event ev[64];
 
-  if (((strcmp(DisplayType, "Element14_7") == 0) || (touchscreen_present == true))
-      && (strcmp(DisplayType, "dfrobot5") != 0))   // Browser or Element14_7, but not dfrobot5
-  {
+  if (((strcmp(DisplayType, "Element14_7") == 0)
+       || (touchscreen_present == true))
+      && (strcmp(DisplayType, "dfrobot5") != 0)) {
+    // Browser or Element14_7, but not dfrobot5
     // Program flow blocks here until there is a touch event
     rb = read(fd, ev, sizeof(struct input_event) * 64);
 
@@ -8006,120 +7790,104 @@ int getTouchSampleThread(int *rawX, int *rawY, int *rawPressure)
     *rawY = -1;
     int StartTouch = 0;
 
-    for (i = 0;  i <  (rb / sizeof(struct input_event)); i++)
-    {
-      if (ev[i].type ==  EV_SYN)
-      {
-        //printf("Event type is %s%s%s = Start of New Event\n", KYEL, events[ev[i].type], KWHT);
+    for (i = 0;  i <  (rb / sizeof(struct input_event)); i++) {
+      if (ev[i].type ==  EV_SYN) {
+        // fprintf(jd, "Event type is %s%s%s = Start of New Event\n", KYEL, events[ev[i].type], KWHT);
       }
-
-      else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 1)
-      {
-        StartTouch = 1;
-        //printf("Event type is %s%s%s & Event code is %sTOUCH(330)%s & Event value is %s1%s = Touch Starting\n",
-        //        KYEL,events[ev[i].type],KWHT,KYEL,KWHT,KYEL,KWHT);
-      }
-
-      else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 0)
-      {
-        StartTouch=0;
-        //printf("Event type is %s%s%s & Event code is %sTOUCH(330)%s & Event value is %s0%s = Touch Finished\n",
-        //        KYEL,events[ev[i].type],KWHT,KYEL,KWHT,KYEL,KWHT);
-      }
-
-      else if (ev[i].type == EV_ABS && ev[i].code == 0 && ev[i].value > 0)
-      {
-        //printf("Event type is %s%s%s & Event code is %sX(0)%s & Event value is %s%d%s\n",
-        //        KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value, KWHT);
-	    *rawX = ev[i].value;
-      }
-
-      else if (ev[i].type == EV_ABS  && ev[i].code == 1 && ev[i].value > 0)
-      {
-        //printf("Event type is %s%s%s & Event code is %sY(1)%s & Event value is %s%d%s\n",
-        //        KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value, KWHT);
-        *rawY = ev[i].value;
-      }
-
-      else if (ev[i].type == EV_ABS  && ev[i].code == 24 && ev[i].value > 0)
-      {
-        //printf("Event type is %s%s%s & Event code is %sPressure(24)%s & Event value is %s%d%s\n",
-        //        KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value,KWHT);
-        *rawPressure = ev[i].value;
-      }
-
-      if((*rawX != -1) && (*rawY != -1) && (StartTouch == 1))  // 1a
-      {
-        printf("7 inch Touchscreen Touch Event: rawX = %d, rawY = %d\n", *rawX, *rawY);
+      else
+	if (ev[i].type == EV_KEY &&
+	    ev[i].code == 330 &&
+	    ev[i].value == 1) {
+	  StartTouch = 1;
+	  // fprintf(jd, "Event type is %s%s%s & Event code is %sTOUCH(330)%s & Event value is %s1%s = Touch Starting\n", KYEL,events[ev[i].type],KWHT,KYEL,KWHT,KYEL,KWHT);
+	}
+	else
+	  if (ev[i].type == EV_KEY &&
+	      ev[i].code == 330 &&
+	      ev[i].value == 0) {
+	    StartTouch=0;
+	    // fprintf(jd, "Event type is %s%s%s & Event code is %sTOUCH(330)%s & Event value is %s0%s = Touch Finished\n", KYEL,events[ev[i].type],KWHT,KYEL,KWHT,KYEL,KWHT);
+	  }
+	  else
+	    if (ev[i].type == EV_ABS &&
+		ev[i].code == 0 &&
+		ev[i].value > 0) {
+	      //fprintf(jd, "Event type is %s%s%s & Event code is %sX(0)%s & Event value is %s%d%s\n", KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value, KWHT);
+	      *rawX = ev[i].value; }
+	    else
+	      if (ev[i].type == EV_ABS &&
+		  ev[i].code == 1 &&
+		  ev[i].value > 0) {
+		// fprintf(jd, "Event type is %s%s%s & Event code is %sY(1)%s & Event value is %s%d%s\n", KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value, KWHT);
+		*rawY = ev[i].value; }
+	      else
+		if (ev[i].type == EV_ABS &&
+		    ev[i].code == 24 &&
+		    ev[i].value > 0) {
+		  // fprintf(jd, "Event type is %s%s%s & Event code is %sPressure(24)%s & Event value is %s%d%s\n", KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value,KWHT);
+		  *rawPressure = ev[i].value; }
+      if((*rawX != -1) &&
+	 (*rawY != -1) &&
+	 (StartTouch == 1)) { // 1a
+        // fprintf(jd, "7 inch Touchscreen Touch Event: rawX = %d, rawY = %d\n", *rawX, *rawY);
         return 1;
-      }
-    }
-  }
+      } } }
 
-  if (strcmp(DisplayType, "dfrobot5") == 0)
-  {
+  if (strcmp(DisplayType, "dfrobot5") == 0) {
     // Program flow blocks here until there is a touch event
     rb = read(fd, ev, sizeof(struct input_event) * 64);
 
-    if (awaitingtouchstart == true)
-    {    
+    if (awaitingtouchstart == true) {    
       *rawX = -1;
       *rawY = -1;
-      touchfinished = false;
-    }
+      touchfinished = false; }
 
-    for (i = 0;  i <  (rb / sizeof(struct input_event)); i++)
-    {
-      //printf("rawX = %d, rawY = %d, rawPressure = %d, \n\n", *rawX, *rawY, *rawPressure);
-
-      if (ev[i].type ==  EV_SYN)
-      {
-        //printf("Event type is %s%s%s = Start of New Event\n",
-        //        KYEL, events[ev[i].type], KWHT);
+    for (i = 0;  i <  (rb / sizeof(struct input_event)); i++) {
+      // 
+      fprintf(jd, "rawX = %d, rawY = %d, rawPressure = %d, \n\n", *rawX, *rawY, *rawPressure);
+      if (ev[i].type ==  EV_SYN) {
+        // fprintf(jd, "Event type is %s%s%s = Start of New Event\n", KYEL, events[ev[i].type], KWHT);
       }
-
-      else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 1)
-      {
+      else
+	if (ev[i].type == EV_KEY &&
+	    ev[i].code == 330 &&
+	    ev[i].value == 1) {
         awaitingtouchstart = false;
         touchfinished = false;
 
-        //printf("Event type is %s%s%s & Event code is %sTOUCH(330)%s & Event value is %s1%s = Touch Starting\n",
-        //        KYEL,events[ev[i].type],KWHT,KYEL,KWHT,KYEL,KWHT);
-      }
-
-      else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 0)
-      {
+        // fprintf(jd, "Event type is %s%s%s & Event code is %sTOUCH(330)%s & Event value is %s1%s = Touch Starting\n", KYEL,events[ev[i].type],KWHT,KYEL,KWHT,KYEL,KWHT);
+	}
+	else
+	  if (ev[i].type == EV_KEY &&
+	      ev[i].code == 330 &&
+	      ev[i].value == 0) {
         awaitingtouchstart = false;
         touchfinished = true;
+        // fprintf(jd, "Event type is %s%s%s & Event code is %sTOUCH(330)%s & Event value is %s0%s = Touch Finished\n", KYEL,events[ev[i].type],KWHT,KYEL,KWHT,KYEL,KWHT);
+	  }
+	  else
+	    if (ev[i].type == EV_ABS &&
+		ev[i].code == 0 &&
+		ev[i].value > 0) {
+        // fprintf(jd, "Event type is %s%s%s & Event code is %sX(0)%s & Event value is %s%d%s\n", KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value, KWHT);
+        *rawX = ev[i].value; }
 
-        //printf("Event type is %s%s%s & Event code is %sTOUCH(330)%s & Event value is %s0%s = Touch Finished\n",
-        //        KYEL,events[ev[i].type],KWHT,KYEL,KWHT,KYEL,KWHT);
-      }
-
-      else if (ev[i].type == EV_ABS && ev[i].code == 0 && ev[i].value > 0)
-      {
-        //printf("Event type is %s%s%s & Event code is %sX(0)%s & Event value is %s%d%s\n",
-        //        KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value, KWHT);
-        *rawX = ev[i].value;
-      }
-
-      else if (ev[i].type == EV_ABS  && ev[i].code == 1 && ev[i].value > 0)
-      {
-        //printf("Event type is %s%s%s & Event code is %sY(1)%s & Event value is %s%d%s\n",
-        //        KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value, KWHT);
-        *rawY = ev[i].value;
-      }
-
-      else if (ev[i].type == EV_ABS  && ev[i].code == 24 && ev[i].value > 0)
-      {
-        //printf("Event type is %s%s%s & Event code is %sPressure(24)%s & Event value is %s%d%s\n",
-        //        KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value,KWHT);
-        *rawPressure = ev[i].value;
-      }
-
-      if((*rawX != -1) && (*rawY != -1) && (touchfinished == true))  // 1a
-      {
-        printf("DFRobot Touch Event: rawX = %d, rawY = %d, rawPressure = %d\n", *rawX, *rawY, *rawPressure);
+	    else
+	      if (ev[i].type == EV_ABS  &&
+		  ev[i].code == 1 &&
+		  ev[i].value > 0) {
+		// fprintf(jd, "Event type is %s%s%s & Event code is %sY(1)%s & Event value is %s%d%s\n", KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value, KWHT);
+		*rawY = ev[i].value; }
+	      else
+		if (ev[i].type == EV_ABS  &&
+		    ev[i].code == 24 &&
+		    ev[i].value > 0) {
+		  // fprintf(jd, "Event type is %s%s%s & Event code is %sPressure(24)%s & Event value is %s%d%s\n", KYEL, events[ev[i].type], KWHT, KYEL, KWHT, KYEL, ev[i].value,KWHT);
+		  *rawPressure = ev[i].value; }
+      if((*rawX != -1) &&
+	 (*rawY != -1) &&
+	 (touchfinished == true)) { // 1a
+        fprintf(jd, "DFRobot Touch Event: rawX = %d, rawY = %d, rawPressure = %d\n", *rawX, *rawY, *rawPressure);
         awaitingtouchstart = true;
         touchfinished = false;
         return 1;
@@ -8132,73 +7900,60 @@ int getTouchSampleThread(int *rawX, int *rawY, int *rawPressure)
 
 int getTouchSample(int *rawX, int *rawY, int *rawPressure)
 {
-  while (true)
-  {
-    if (TouchTrigger == 1)
-    {
+  while (true) {
+    if (TouchTrigger == 1) {
       *rawX = TouchX;
       *rawY = TouchY;
       *rawPressure = TouchPressure;
       TouchTrigger = 0;
-      printf("Touch rawX = %d, rawY = %d, rawPressure = %d\n", *rawX, *rawY, *rawPressure);
-      return 1;
-    }
-    else if ((webcontrol == true) && (strcmp(WebClickForAction, "yes") == 0))
-    {
-      *rawX = web_x;
-      *rawY = web_y;
-      *rawPressure = 0;
-      strcpy(WebClickForAction, "no");
-      printf("Web rawX = %d, rawY = %d, rawPressure = %d\n", *rawX, *rawY, *rawPressure);
-      return 1;
-    }
-    else if (MouseClickForAction == true)
-    {
-      *rawX = mouse_x;
-      *rawY = mouse_y;
-      *rawPressure = 0;
-      MouseClickForAction = false;
-      printf("Mouse rawX = %d, rawY = %d, rawPressure = %d\n", *rawX, *rawY, *rawPressure);
-      return 1;
-    }
-    else if (FalseTouch == true)
-    {
-      *rawX = web_x;
-      *rawY = web_y;
-      *rawPressure = 0;
-      FalseTouch = false;
-      printf("False Touch prompted by other event\n");
-      return 1;
-    }
+      fprintf(jd, "Touch rawX = %d, rawY = %d, rawPressure = %u\n",
+	      *rawX, *rawY, *rawPressure);
+      return 1; }
     else
-    {
-      usleep(1000);
-    }
-  }
+      if ((webcontrol == true) &&
+	  (strcmp(WebClickForAction, "yes") == 0)) {
+	*rawX = web_x;
+	*rawY = web_y;
+	*rawPressure = 0;
+	strcpy(WebClickForAction, "no");
+	// fprintf(jd, "Web rawX = %d, rawY = %d, rawPressure = %d\n", *rawX, *rawY, *rawPressure);
+	return 1; }
+      else
+	if (MouseClickForAction == true) {
+	  *rawX = mouse_x;
+	  *rawY = mouse_y;
+	  *rawPressure = 0;
+	  MouseClickForAction = false;
+	  // fprintf(jd, "Mouse rawX = %d, rawY = %d, rawPressure = %d\n", *rawX, *rawY, *rawPressure);
+	  return 1; }
+    else
+      if (FalseTouch == true) {
+	*rawX = web_x;
+	*rawY = web_y;
+	*rawPressure = 0;
+	FalseTouch = false;
+	printf("False Touch prompted by other event\n");
+	return 1; }
+      else {
+	usleep(1000); } }
   return 0;
 }
 
-
-void *WaitTouchscreenEvent(void * arg)
-{
+void *WaitTouchscreenEvent(void * arg) {
   int TouchTriggerTemp;
   int rawX;
   int rawY;
   int rawPressure;
-  while (true)
-  {
+  while (true) {
     TouchTriggerTemp = getTouchSampleThread(&rawX, &rawY, &rawPressure);
     TouchX = rawX;
     TouchY = rawY;
     TouchPressure = rawPressure;
-    TouchTrigger = TouchTriggerTemp;
-  }
+    TouchTrigger = TouchTriggerTemp; }
   return NULL;
 }
 
-
-void *WaitMouseEvent(void * arg)
-{
+void *WaitMouseEvent(void * arg) {
   int x = 0;
   int y = 0;
   int scroll = 0;
@@ -8206,101 +7961,74 @@ void *WaitMouseEvent(void * arg)
 
   bool left_button_action = false;
 
-  if ((fd = open("/dev/input/event0", O_RDONLY)) < 0)
-  {
+  if ((fd = open("/dev/input/event0", O_RDONLY)) < 0)   {
     perror("evdev open");
-    exit(1);
-  }
+    exit(1); }
+
   struct input_event ev;
-
-  while(1)
-  {
+  while(1) {
     read(fd, &ev, sizeof(struct input_event));
-
-    if (ev.type == 2)  // EV_REL
-    {
-      if (ev.code == 0) // x
-      {
+    if (ev.type == 2) {             // EV_REL
+      if (ev.code == 0) {           // x
         x = x + ev.value;
-        if (x < 0)
-        {
-          x = 0;
-        }
-        if (x > 799)
-        {
-          x = 799;
-        }
-        //printf("value %d, type %d, code %d, x_pos %d, y_pos %d\n",ev.value,ev.type,ev.code, x, y);
-        //printf("x_pos %d, y_pos %d\n", x, y);
+        if (x < 0) {
+          x = 0; }
+        if (x > screenXsize) {
+          x = screenXsize; }
+        //
+	fprintf(jd, "value %d, type %d, code %d, x_pos %d, y_pos %d\n",ev.value,ev.type,ev.code, x, y);
+        //
+	fprintf(jd, "x_pos %d, y_pos %d\n", x, y);
         mouse_active = true;
-        draw_cursor2(x, y);
-      }
-      else if (ev.code == 1) // y
-      {
+        draw_cursor2(x, y); }
+      else if (ev.code == 1) { // y
         y = y - ev.value;
-        if (y < 0)
-        {
-          y = 0;
-        }
-        if (y > 479)
-        {
-          y = 479;
-        }
-        //printf("value %d, type %d, code %d, x_pos %d, y_pos %d\n",ev.value,ev.type,ev.code, x, y);
-        //printf("x_pos %d, y_pos %d\n", x, y);
+        if (y < 0) {
+          y = 0; }
+        if (y > screenYsize) {
+          y = screenYsize; }
+        //
+	fprintf(jd, "value %d, type %d, code %d, x_pos %d, y_pos %d\n",ev.value,ev.type,ev.code, x, y);
+        //
+	fprintf(jd, "x_pos %d, y_pos %d\n", x, y);
         mouse_active = true;
-        while (image_complete == false)  // Wait for menu to be drawn
-        {
-          usleep(1000);
-        }
-        draw_cursor2(x, y);
-      }
-      else if (ev.code == 8) // scroll wheel
-      {
+        while (image_complete == false) { // Wait for menu to be drawn
+          usleep(1000); }
+        draw_cursor2(x, y); }
+      else if (ev.code == 8) { // scroll wheel
         scroll = scroll + ev.value;
-        //printf("value %d, type %d, code %d, scroll %d\n",ev.value,ev.type,ev.code, scroll);
-      }
-      else
-      {
-        //printf("value %d, type %d, code %d\n", ev.value, ev.type, ev.code);
-      }
-    }
-
-    else if (ev.type == 4)  // EV_MSC
-    {
-      if (ev.code == 4) // ?
-      {
-        if (ev.value == 589825)
-        { 
-          //printf("value %d, type %d, code %d, left mouse click \n", ev.value, ev.type, ev.code);
-          //printf("Waiting for up or down signal\n");
-          left_button_action = true;
-        }
-        if (ev.value == 589826)
-        { 
-          printf("value %d, type %d, code %d, right mouse click \n", ev.value, ev.type, ev.code);
-        }
-      }
-    }
-    else if (ev.type == 1)
-    {
-      //printf("value %d, type %d, code %d\n", ev.value, ev.type, ev.code);
-
-      if ((left_button_action == true) && (ev.code == 272) && (ev.value == 1) && (mouse_active == true))
-      {
-        mouse_x = x;
-        mouse_y = 479 - y;
-        MouseClickForAction = true;
-      }
-      left_button_action = false;
-    }
+        //
+	fprintf(jd, "value %d, type %d, code %d, scroll %d\n",ev.value,ev.type,ev.code, scroll); }
+      else {
+        //
+	fprintf(jd, "value %d, type %d, code %d\n", ev.value, ev.type, ev.code); } }
     else
-    { 
-      //printf("value %d, type %d, code %d\n", ev.value, ev.type, ev.code);
-    }
-  }
-}
-
+      if (ev.type == 4) {    // EV_MSC
+	if (ev.code == 4) {  // ?
+	  if (ev.value == 589825) {
+	    //
+	    fprintf(jd, "value %d, type %d, code %d, left mouse click \n", ev.value, ev.type, ev.code);
+	    //
+	    fprintf(jd, "Waiting for up or down signal\n");
+	    left_button_action = true; }
+	  if (ev.value == 589826) { 
+	    fprintf(jd, "value %d, type %d, code %d, right mouse click \n", ev.value, ev.type, ev.code); } } }
+    else
+      if (ev.type == 1) {
+	//
+	fprintf(jd, "value %d, type %d, code %d\n", ev.value, ev.type, ev.code);
+	if ((left_button_action == true) &&
+	    (ev.code == 272) &&
+	    (ev.value == 1) &&
+	    (mouse_active == true)) {
+	  mouse_x = x;
+	  mouse_y = screenYsize - y;
+	  MouseClickForAction = true; }
+	left_button_action = false; }
+      else { 
+	//
+	fprintf(jd, "value %d, type %d, code %d\n", ev.value, ev.type, ev.code);
+      } } }
 
 void handle_mouse()
 {
@@ -9623,8 +9351,10 @@ int SelectFromList(int CurrentSelection, char ListEntry[101][63], int ListLength
     // Wait for key press
     if (getTouchSample(&rawX, &rawY, &rawPressure) == 0) continue;
 
-    TransformTouchMap(rawX, rawY);  // returns scaledX, scaledY with bottom left origin to 800, 480
-    //printf("X::: %d Y::: %d\n", scaledX, scaledY);
+    TransformTouchMap(rawX, rawY);
+    // returns scaledX, scaledY with bottom left origin to 800, 480
+    //
+    fprintf(jd, "X::: %d Y::: %d\n", scaledX, scaledY);
 
     // Check if a line has been highlighted
     for (j = 1; j <= 10; j++)
@@ -12323,8 +12053,6 @@ void TransmitStart()
   CheckPlutoReady();
   // and Check LibreSDR connected if selected
   CheckLibreSDRReady();
-  // and Check Muntjac connected if selected
-  CheckMuntjacReady();
 
   strcpy(Param,"modeinput");
   GetConfigParam(PATH_PCONFIG,Param,Value);
@@ -16047,17 +15775,8 @@ void InfoScreen()
   UpdateWeb();
 
   // Create Wait Button thread
-  pthread_create (&thbutton, NULL, &WaitButtonEvent, NULL); 
+  pthread_create (&thbutton, NULL, &WaitButtonEvent, NULL);    // Show changing time while waiting for touch
 
-  // Display Muntjac serial if available (takes 200 ms, so done last)
-  char MuntjacName[127] = " ";
-  GetMuntjacSerial(MuntjacName);
-  strcat(TXParams3, "           ");
-  strcat(TXParams3, MuntjacName);
-  linenumber = 9;
-  Text2(wscreen/25, hscreen - linenumber * linepitch, TXParams3, font_ptr);
-
-  // Show changing time while waiting for touch
   struct tm *tm;
   int seconds;
   tm =  gmtime(&t);
@@ -19995,547 +19714,6 @@ void ChangeHamTV(int NoButton)
     SetConfigParam(PATH_HAMTV_CONFIG, "region", htRegion);
     break;
   }
-}
-
-
-void ChangeTracker(int NoButton)
-{
-  char StoreText[31];
-  char TrackCommand[511];
-  char DeviceString[127];
-  bool IsValid = false;
-  char RequestText[63];
-  char InitText[63];
-
-  if (strcmp(CtrlType, "G5500pi") == 0)
-  {
-    snprintf(DeviceString, 126, " --g5500pi --g55pi_ip %s", G5500piAddress);
-  }
-  else
-  {
-    snprintf(DeviceString, 126, " --device %s --model %s --baud %s", HamLibDevice, HamLibModel, HamLibBaud);
-  }
-
-  switch (NoButton)
-  {
-  case 0:                                            // cycle through flip options
-    system("pkill -9 -f iss_track.py");              // Stop it first
-    if (strcmp(flip, "disabled") == 0)
-    {
-      strcpy(flip, "enabled");
-    }
-    else if (strcmp(flip, "enabled") == 0)
-    {
-      strcpy(flip, "forced");
-    }
-    else if (strcmp(flip, "forced") == 0)
-    {
-      strcpy(flip, "half-flip");
-    }
-    else
-    {
-      strcpy(flip, "disabled");
-    }
-    SetConfigParam(PATH_TRACK_CONFIG, "flip", flip);
-    break;
-  case 2:                                            // downward el offset
-    system("pkill -9 -f iss_track.py");
-    ElOffset = ElOffset - 1;
-    snprintf(StoreText, 15, "%d", ElOffset);
-    SetConfigParam(PATH_TRACK_CONFIG, "eloffset", StoreText);
-    break;
-  case 5:                                            // change control type
-    system("pkill -9 -f iss_track.py");              // Stop it first
-    strcpy(TrackMode, "stop");
-    SetConfigParam(PATH_TRACK_CONFIG, "trackmode", TrackMode);
-
-    if (strcmp(CtrlType, "G5500pi") == 0)
-    {
-      strcpy(CtrlType, "HamLib");
-    }
-    else
-    {
-      strcpy(CtrlType, "G5500pi");
-    }
-    SetConfigParam(PATH_TRACK_CONFIG, "ctrltype", CtrlType);
-    break;
-  case 6:                                            // left az offset
-    system("pkill -9 -f iss_track.py");
-    AzOffset = AzOffset - 1;
-    snprintf(StoreText, 15, "%d", AzOffset);
-    SetConfigParam(PATH_TRACK_CONFIG, "azoffset", StoreText);
-    break;
-  case 7:                                            // Zero offset
-    system("pkill -9 -f iss_track.py");
-    ElOffset = 0;
-    AzOffset = 0;
-    snprintf(StoreText, 15, "%d", AzOffset);
-    SetConfigParam(PATH_TRACK_CONFIG, "azoffset", StoreText);
-    snprintf(StoreText, 15, "%d", ElOffset);
-    SetConfigParam(PATH_TRACK_CONFIG, "eloffset", StoreText);
-    break;
-  case 8:                                            // right az offset
-    system("pkill -9 -f iss_track.py");
-    AzOffset = AzOffset + 1;
-    snprintf(StoreText, 15, "%d", AzOffset);
-    SetConfigParam(PATH_TRACK_CONFIG, "azoffset", StoreText);
-    break;
-  case 10:                                           // Set up rotator
-    system("pkill -9 -f iss_track.py");              // Stop it first
-    strcpy(TrackMode, "stop");
-    SetConfigParam(PATH_TRACK_CONFIG, "trackmode", TrackMode);
-
-    if (strcmp(CtrlType, "G5500pi") == 0)              // G5500pi
-    {
-      IsValid = false;
-      while (IsValid == false)
-      {
-        strcpy(RequestText, "Enter the G5500Pi ip address:port");
-        snprintf(InitText, 31, "%s", G5500piAddress);
-        Keyboard(RequestText, InitText, 21);
-  
-        if(strlen(KeyboardReturn) > 10)
-        {
-          IsValid = true;
-        }
-      }
-      printf("G5500pi IP address set to: %s\n", KeyboardReturn);
-      strcpy(G5500piAddress, KeyboardReturn);
-      SetConfigParam(PATH_TRACK_CONFIG, "g5500piaddress", G5500piAddress);
-    }
-    else                                              // Hamlib
-    {
-      IsValid = false;
-      while (IsValid == false)
-      {
-        strcpy(RequestText, "Enter the HamLib device address");
-        snprintf(InitText, 31, "%s", HamLibDevice);
-        Keyboard(RequestText, InitText, 31);
-  
-        if(strlen(KeyboardReturn) > 10)
-        {
-          IsValid = true;
-        }
-      }
-      printf("HamLib device address set to: %s\n", KeyboardReturn);
-      strcpy(HamLibDevice, KeyboardReturn);
-      SetConfigParam(PATH_TRACK_CONFIG, "hamlibdevice", HamLibDevice);
-
-      IsValid = false;
-      while (IsValid == false)
-      {
-        strcpy(RequestText, "Enter the HamLib model number");
-        snprintf(InitText, 31, "%s", HamLibModel);
-        Keyboard(RequestText, InitText, 31);
-  
-        if(strlen(KeyboardReturn) > 0)
-        {
-          IsValid = true;
-        }
-      }
-      printf("HamLib model number set to: %s\n", KeyboardReturn);
-      strcpy(HamLibModel, KeyboardReturn);
-      SetConfigParam(PATH_TRACK_CONFIG, "hamlibmodel", HamLibModel);
-
-      IsValid = false;
-      while (IsValid == false)
-      {
-        strcpy(RequestText, "Enter the HamLib baud rate");
-        snprintf(InitText, 31, "%s", HamLibBaud);
-        Keyboard(RequestText, InitText, 31);
-  
-        if(strlen(KeyboardReturn) > 1)
-        {
-          IsValid = true;
-        }
-      }
-      printf("HamLib baud rate set to: %s\n", KeyboardReturn);
-      strcpy(HamLibBaud, KeyboardReturn);
-      SetConfigParam(PATH_TRACK_CONFIG, "hamlibbaud", HamLibBaud);
-    }
-
-    break;
-  case 12:                                           // upward el offset
-    system("pkill -9 -f iss_track.py");
-    ElOffset = ElOffset + 1;
-    snprintf(StoreText, 15, "%d", ElOffset);
-    SetConfigParam(PATH_TRACK_CONFIG, "eloffset", StoreText);
-    break;
-  case 14:                                           // Set Park Position
-    IsValid = false;
-    while (IsValid == false)
-    {
-      strcpy(RequestText, "Enter the Park Position Azimuth (0 - 359)");
-      snprintf(InitText, 31, "%.0f", AzPark);
-      Keyboard(RequestText, InitText, 3);
-  
-      if((strlen(KeyboardReturn) > 0) && (atoi(KeyboardReturn) < 360))
-      {
-        IsValid = true;
-      }
-    }
-    printf("Park azimuth set to: %s\n", KeyboardReturn);
-
-    AzPark = atof(KeyboardReturn);
-
-    SetConfigParam(PATH_TRACK_CONFIG, "azpark", KeyboardReturn);
-
-    IsValid = false;
-    while (IsValid == false)
-    {
-      strcpy(RequestText, "Enter the Park Position Elevation (0 - 90)");
-      snprintf(InitText, 31, "%.0f", ElPark);
-      Keyboard(RequestText, InitText, 2);
-  
-      if((strlen(KeyboardReturn) > 0) && (atoi(KeyboardReturn) < 91))
-      {
-        IsValid = true;
-      }
-    }
-    printf("Park elevation set to: %s\n", KeyboardReturn);
-
-    ElPark = atof(KeyboardReturn);
-
-    SetConfigParam(PATH_TRACK_CONFIG, "elpark", KeyboardReturn);
-
-    break;
-  case 15:                                           // Stop
-    system("pkill -9 -f iss_track.py");
-    strcpy(TrackMode, "stop");
-    SetConfigParam(PATH_TRACK_CONFIG, "trackmode", TrackMode);
-
-    snprintf(TrackCommand, 510, "/home/pi/rpidatv/src/iss_tracker/iss_track.py %s --stop", DeviceString);
-    system(TrackCommand);
-
-    break;
-  case 16:                                           // Track Moon
-    system("pkill -9 -f iss_track.py");
-    strcpy(TrackMode, "moon");
-    SetConfigParam(PATH_TRACK_CONFIG, "trackmode", TrackMode);
-    break;
-  case 17:                                           // Track ISS
-    system("pkill -9 -f iss_track.py");
-    strcpy(TrackMode, "iss");
-    SetConfigParam(PATH_TRACK_CONFIG, "trackmode", TrackMode);
-    break;
-  case 18:                                           // Track Sun
-    system("pkill -9 -f iss_track.py");
-    strcpy(TrackMode, "sun");
-    SetConfigParam(PATH_TRACK_CONFIG, "trackmode", TrackMode);
-    break;
-  case 19:                                           // Park
-    system("pkill -9 -f iss_track.py");
-    strcpy(TrackMode, "park");
-    SetConfigParam(PATH_TRACK_CONFIG, "trackmode", TrackMode);
-
-    snprintf(TrackCommand, 510, "/home/pi/rpidatv/src/iss_tracker/iss_track.py %s --park-az %.0f --park-el %.0f --park-now", DeviceString, AzPark, ElPark);
-    system(TrackCommand);
-
-    break;
-  }
-
-  // If required, build the track command based on the selections
-  if ((strcmp(TrackMode, "moon") == 0) || (strcmp(TrackMode, "iss") == 0) || (strcmp(TrackMode, "sun") == 0))
-  {
-    switch (NoButton)
-    {
-      case 0:                                            // Flip option has changed
-      case 2:                                            // elevation offset has changed
-      case 6:                                            // azimuth offset has changed
-      case 7:                                            // offset has changed to zero
-      case 8:                                            // azimuth offset has changed
-      case 12:                                           // elevation offset has changed
-      case 16:                                           // Track Moon
-      case 17:                                           // Track ISS
-      case 18:                                           // Track Sun
-
-      //usleep(2000000);                                      // Wait for process to die
-
-      // Base command
-      strcpy (TrackCommand, "/home/pi/rpidatv/src/iss_tracker/iss_track.py");
-
-      // Add station latitude
-      char latitude[31];
-      snprintf(latitude, 30, " --lat %.3f", Locator_To_Lat(Locator));
-      strcat(TrackCommand, latitude);
-
-      // Add station longitude
-      char longitude[31];
-      snprintf(longitude, 30, " --lon %.3f", Locator_To_Lon(Locator));
-      strcat(TrackCommand, longitude);
-
-      // Add rotator controller device
-      strcat(TrackCommand, DeviceString);
-
-      // Add Park azimuth and elevation
-      char ParkPos[63];
-      snprintf(ParkPos, 62, " --park-az %.1f --park-el %.1f", AzPark, ElPark);
-      strcat(TrackCommand, ParkPos);
-
-      // Check if sun tracking
-      if (strcmp(TrackMode, "sun") == 0)
-      {
-        strcat(TrackCommand, " --sun");
-      }
-      
-      // Check if moon tracking
-      if (strcmp(TrackMode, "moon") == 0)
-      {
-        strcat(TrackCommand, " --moon");
-      }
-
-      // Include Az and El offsets
-      char OffsetText[31];
-      snprintf(OffsetText, 30, " --offs-az %d --offs-el %d", AzOffset, ElOffset);
-      strcat(TrackCommand, OffsetText);
-
-      // Include flip instructions
-      if (strcmp(flip, "forced") == 0)                // Forced full flip
-      {
-        strcat(TrackCommand, " --flip");
-      }
-      if ((strcmp(flip, "enabled") == 0) && true)    // Add auto mode here
-      {
-        strcat(TrackCommand, " --flip");
-      }
-      if ((strcmp(flip, "enabled") == 0) && false)    // Add auto mode here
-      {
-        strcat(TrackCommand, " --half-flip");
-      }
-      if (strcmp(flip, "half-flip") == 0)             // Forced half-flip
-      {
-        strcat(TrackCommand, " --half-flip");
-      }
-
-      // Run as independent process      
-      strcat(TrackCommand, " &");
-      printf("\n%s\n\n", TrackCommand);
-      system(TrackCommand);
-      break;
-    }
-  }
-}
-
-
-void *TrackDisplay(void * arg)
-{
-  const font_t *font_ptr = &font_dejavu_sans_20;
-  FILE *fp;
-  char response[255] = "";
-  char line1[255];
-  char line2[255];
-  char line2a[255] = "Actual         azimuth       elevation        ";
-  int firstDP;
-  int secondDP;
-  int i;
-  int tracking_status = 0;
-
-  while(CurrentMenu == 51)
-  {
-    ISS_thread_running = true;
-    tracking_status = check_ISStracking_status();
-
-    // Read Demanded Position
-    fp = popen("cat /home/pi/tmp/demand.txt", "r");
-    if (fp == NULL)
-    {
-      printf("Failed to run command\n" );
-      exit(1);
-    }
-    while (fgets(response, 250, fp) != NULL)
-    {
-      if (strlen(response) > 5)  //
-      {
-        strcpy(line1, response);
-      }
-    }
-    pclose(fp);
-
-    // Read Actual Position
-    fp = popen("cat /home/pi/tmp/actual.txt", "r");
-    if (fp == NULL)
-    {
-      printf("Failed to run command\n" );
-      exit(1);
-    }
-    while (fgets(response, 250, fp) != NULL)
-    {
-      if (strlen(response) > 5)  //
-      {
-        strcpy(line2, response);
-      }
-    }
-    pclose(fp);
-
-    firstDP = 0;
-    secondDP = 0;
-    for (i = 0; i < strlen(line2); i++)
-    {
-      if ((line2[i] == '.') && (firstDP > 0))
-      {
-        secondDP = i;
-        break;
-      }
-
-      if ((line2[i] == '.') && (firstDP == 0))
-      {
-        firstDP = i;
-      }
-    }
-
-    switch (firstDP)
-    {
-      case 19:                                         // xxx.x
-        for (i = firstDP - 3; i < firstDP + 2; i++)
-        {
-          line2a[7 + i] = line2[i];
-        }
-        break;
-      case 18:                                         // xx.x
-        line2a[23] = ' ';
-        for (i = firstDP - 2; i < firstDP + 2; i++)
-        {
-          line2a[8 + i] = line2[i];
-        }
-        break;
-      case 17:                                         // x.x
-        line2a[23] = ' ';
-        line2a[24] = ' ';
-        for (i = firstDP - 1; i < firstDP + 2; i++)
-        {
-          line2a[9 + i] = line2[i];
-        }
-        break;
-    }
-
-    if(line2[secondDP - 4] == ' ')                     // xxx.x
-    {
-      for (i = secondDP - 3; i < secondDP + 2; i++)
-      {
-        line2a[15 + i] = line2[i];
-      }
-    }
-    if(line2[secondDP - 3] == ' ')                     // xx.x
-    {
-      line2a[16 + secondDP - 3] = ' ';
-      for (i = secondDP - 2; i < secondDP + 2; i++)
-      {
-        line2a[16 + i] = line2[i];
-      }
-    }
-    if(line2[secondDP - 2] == ' ')                     // x.x
-    {
-      line2a[17 + secondDP - 3] = ' ';
-      line2a[17 + secondDP - 2] = ' ';
-      for (i = secondDP - 1; i < secondDP + 2; i++)
-      {
-        line2a[17 + i] = line2[i];
-      }
-    }
-
-    // Paint to screen
-    rectangle(100, hscreen - 140, 450, 55, 0, 0, 0);
-    Text2(100, hscreen - 100, line1, font_ptr);
-    if ((tracking_status == 1) || (tracking_status == 2) || (tracking_status == 3))
-    {
-      Text2(100, hscreen - 130, line2a, font_ptr);
-    }
-    usleep(1000000);
-  }
-
-  ISS_thread_running = false;
-  return NULL;
-}
-
-
-/***************************************************************************//**
- * @brief Checks current ISS tracking status
- *        and starts position display thread
- *
- * @param None
- *
- * @return integer 0 = stop, 1 = moon, 2 = iss, 3 = sun, 4 = park
-*******************************************************************************/
-
-int check_ISStracking_status()
-{
-  FILE *fp;
-  char response[255] = "";
-  bool moon = false;
-  bool sun = false;
-  bool iss = false;
-
-  // Start position display thread 
-  if(ISS_thread_running == false)
-  {
-    pthread_create (&thiss, NULL, &TrackDisplay, NULL);
-  }
-
-  // Check for moon tracking
-  fp = popen("pgrep -a iss_track.py | grep 'moon'", "r");
-  if (fp == NULL)
-  {
-    printf("Failed to run command\n" );
-    exit(1);
-  }
-  while (fgets(response, 250, fp) != NULL)
-  {
-    if (strlen(response) > 10)  //
-    {
-      moon = true;
-    }
-  }
-  pclose(fp);
-
-  if (moon == true)
-  {
-    return 1;
-  }
-
-  // Check for sun tracking
-  fp = popen("pgrep -a iss_track.py | grep 'sun'", "r");
-  if (fp == NULL)
-  {
-    printf("Failed to run command\n" );
-    exit(1);
-  }
-  while (fgets(response, 250, fp) != NULL)
-  {
-    if (strlen(response) > 10)  //
-    {
-      sun = true;
-    }
-  }
-  pclose(fp);
-
-  if (sun == true)
-  {
-    return 3;
-  }
-
-  // Check for ISS tracking (sun and moon discounted, so must be ISS)
-  fp = popen("pgrep -a iss_track.py", "r");
-  if (fp == NULL)
-  {
-    printf("Failed to run command\n" );
-    exit(1);
-  }
-  while (fgets(response, 250, fp) != NULL)
-  {
-    if (strlen(response) > 10)  //
-    {
-      iss = true;
-    }
-  }
-  pclose(fp);
-
-  if (iss == true)
-  {
-    return 2;
-  }
-
-  // Not tracking, so must be stop (might also be parked)
-  return 0;
 }
 
 
@@ -24626,72 +23804,10 @@ void waituntil(int w,int h)
           Start_Highlights_Menu48();
           UpdateWindow();
           break;
-        case 14:
-          CurrentMenu = 51;
-          setBackColour(0, 0, 0);
-          clearScreen();
-          Start_Highlights_Menu51();
-          UpdateWindow();
-          break;
         default:
           printf("Menu 48 Error\n");
         }
         continue;   // Completed Menu 48 action, go and wait for touch
-      }
-
-      if (CurrentMenu == 51)  // Menu 51 ISS Rotator Control
-      {
-        printf("Button Event %d, Entering Menu 51 Case Statement\n",i);
-        switch (i)
-        {
-        case 4:                               // Exit to Menu 1
-          SelectInGroupOnMenu(CurrentMenu, 4, 4, 4, 1);
-          printf("Cancelling Rotator Control Menu\n");
-          UpdateWindow();
-          usleep(500000);
-          SelectInGroupOnMenu(CurrentMenu, 4, 4, 4, 0); // Reset cancel (even if not selected)
-          printf("Returning to MENU 1 from Menu 51\n");
-          CurrentMenu = 1;
-          setBackColour(255, 255, 255);
-          clearScreen();
-          Start_Highlights_Menu1();
-          UpdateWindow();
-          break;
-        case 9:                               // Exit to Menu 48
-          SelectInGroupOnMenu(CurrentMenu, 9, 9, 9, 1);
-          printf("Cancelling Rotator Control Menu\n");
-          UpdateWindow();
-          usleep(500000);
-          SelectInGroupOnMenu(CurrentMenu, 9, 9, 9, 0); // Reset cancel (even if not selected)
-          printf("Returning to MENU 48 from Menu 51\n");
-          CurrentMenu = 48;
-          setBackColour(0, 0, 0);
-          clearScreen();
-          Start_Highlights_Menu48();
-          UpdateWindow();
-          break;
-        case 0:                                         // Set flip mode
-        case 2:                                         // offset down 1
-        case 5:                                         // Set Control mode
-        case 6:                                         // offset left 1
-        case 7:                                         // cancel offset
-        case 8:                                         // offset right 1
-        case 10:                                        // Set up Rotator
-        case 12:                                        // offset up 1
-        case 14:                                        // Set park position
-        case 15:                                        // Stop
-        case 16:                                        // Track moon
-        case 17:                                        // Track ISS
-        case 18:                                        // Track Sun
-        case 19:                                        // Park
-          ChangeTracker(i);
-          Start_Highlights_Menu51();
-          UpdateWindow();
-          break;
-        default:
-          printf("Menu 51 Error\n");
-        }
-        continue;   // Completed Menu 51 action, go and wait for touch
       }
 
 
@@ -30383,9 +29499,6 @@ void Define_Menu48()
   AddButtonStatus(button, "LNB Volts^18 Horiz", &Green);
   AddButtonStatus(button, "LNB Volts^13 Vert", &Green);
 
-  button = CreateButton(48, 14);
-  AddButtonStatus(button, "ISS Tracker^Set-up", &Blue);
-
 }
 
 
@@ -30472,172 +29585,6 @@ void Start_Highlights_Menu48()
   else
   {
     AmendButtonStatus(ButtonNumber(48, 7), 0, "Region^Undefined", &Blue);
-  }
-}
-
-
-void Define_Menu51()
-{
-  int button;
-
-  strcpy(MenuTitle[51], "ISS Tracker Menu (51)");
-
-  button = CreateButton(51, 0);
-  AddButtonStatus(button, "Flip Mode^Disabled", &Blue);
-  AddButtonStatus(button, "Flip Mode^Auto", &Green);
-  AddButtonStatus(button, "Flip Mode^Forced", &Green);
-  AddButtonStatus(button, "Flip Mode^Half-flip", &Green);
-
-  button = CreateButton(51, 2);
-  AddButtonStatus(button, "Offset^Down", &Blue);
-  AddButtonStatus(button, "Offset^Down", &Green);
-
-  button = CreateButton(51, 4);
-  AddButtonStatus(button, "Exit to^Main Menu", &Blue);
-
-  button = CreateButton(51, 5);
-  AddButtonStatus(button, "Controller^HamLib", &Blue);
-  AddButtonStatus(button, "Controller^G5500pi", &Blue);
-
-  button = CreateButton(51, 6);
-  AddButtonStatus(button, "Offset^Left", &Blue);
-
-  button = CreateButton(51, 7);
-  AddButtonStatus(button, "Cancel^Offset", &Blue);
-
-  button = CreateButton(51, 8);
-  AddButtonStatus(button, "Offset^Right", &Blue);
-
-  button = CreateButton(51, 9);
-  AddButtonStatus(button, "Exit to^HamTV Menu", &Blue);
-
-  button = CreateButton(51, 10);
-  AddButtonStatus(button, "Set-up^Controller", &Blue);
-
-  button = CreateButton(51, 12);
-  AddButtonStatus(button, "Offset^Up", &Blue);
-
-  button = CreateButton(51, 14);
-  AddButtonStatus(button, "Set Park^Position", &Blue);
-
-  button = CreateButton(51, 15);
-  AddButtonStatus(button, "Stop^ ", &Blue);
-  AddButtonStatus(button, "Stop^ ", &Green);
-
-  button = CreateButton(51, 16);
-  AddButtonStatus(button, "Track^Moon", &Blue);
-  AddButtonStatus(button, "Track^Moon", &Green);
-
-  button = CreateButton(51, 17);
-  AddButtonStatus(button, "Track^ISS", &Blue);
-  AddButtonStatus(button, "Track^ISS", &Green);
-
-  button = CreateButton(51, 18);
-  AddButtonStatus(button, "Track^Sun", &Blue);
-  AddButtonStatus(button, "Track^Sun", &Green);
-
-  button = CreateButton(51, 19);
-  AddButtonStatus(button, "Park^ ", &Blue);
-  AddButtonStatus(button, "Park^ ", &Green);
-}
-
-
-void Start_Highlights_Menu51()
-{
-  char ButText[63];
-  int track_status;
-
-  track_status = check_ISStracking_status();
- 
-  if (strcmp(flip, "enabled") == 0)
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 0), 1);
-  }
-  else if (strcmp(flip, "forced") == 0)
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 0), 2);
-  }
-  else if (strcmp(flip, "half-flip") == 0)
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 0), 3);
-  }
-  else
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 0), 0);
-  }
-
-  if (strcmp(CtrlType, "HamLib") == 0)
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 5), 0);
-  }
-  else
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 5), 1);
-  }
-
-  if (ElOffset < 0)
-  {
-    snprintf(ButText, 30, "Offset Down^%d deg", ElOffset);
-    AmendButtonStatus(ButtonNumber(CurrentMenu, 2), 1, ButText, &Green);
-    SetButtonStatus(ButtonNumber(CurrentMenu, 2), 1);
-  }
-  else
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 2), 0);
-  }
-
-  if (AzOffset < 0)
-  {
-    snprintf(ButText, 30, "Offset Left^%d deg", AzOffset);
-    AmendButtonStatus(ButtonNumber(CurrentMenu, 6), 1, ButText, &Green);
-    SetButtonStatus(ButtonNumber(CurrentMenu, 6), 1);
-  }
-  else
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 6), 0);
-  }
-
-  if (AzOffset > 0)
-  {
-    snprintf(ButText, 30, "Offset Right^%d deg", AzOffset);
-    AmendButtonStatus(ButtonNumber(CurrentMenu, 8), 1, ButText, &Green);
-    SetButtonStatus(ButtonNumber(CurrentMenu, 8), 1);
-  }
-  else
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 8), 0);
-  }
-
-  if (ElOffset > 0)
-  {
-    snprintf(ButText, 30, "Offset Up^%d deg", ElOffset);
-    AmendButtonStatus(ButtonNumber(CurrentMenu, 12), 1, ButText, &Green);
-    SetButtonStatus(ButtonNumber(CurrentMenu, 12), 1);
-  }
-  else
-  {
-    SetButtonStatus(ButtonNumber(CurrentMenu, 12), 0);
-  }
-
-  if ((strcmp(TrackMode, "stop") == 0) || ((track_status == 0) && (strcmp(TrackMode, "park") != 0)))
-  {
-     SelectInGroupOnMenu(CurrentMenu, 15, 19, 15, 1);
-  }
-  else if ((strcmp(TrackMode, "moon") == 0) && (track_status == 1))
-  {
-     SelectInGroupOnMenu(CurrentMenu, 15, 19, 16, 1);
-  }
-  else if ((strcmp(TrackMode, "iss") == 0) && (track_status == 2))
-  {
-     SelectInGroupOnMenu(CurrentMenu, 15, 19, 17, 1);
-  }
-  else if ((strcmp(TrackMode, "sun") == 0) && (track_status == 3))
-  {
-     SelectInGroupOnMenu(CurrentMenu, 15, 19, 18, 1);
-  }
-  else if ((strcmp(TrackMode, "park") == 0) && (track_status == 0))
-  {
-     SelectInGroupOnMenu(CurrentMenu, 15, 19, 19, 1);
   }
 }
 
@@ -30911,7 +29858,6 @@ terminate(int dummy)
   system("sudo killall longmynd >/dev/null 2>/dev/null");
   system("sudo killall /home/pi/rpidatv/bin/CombiTunerExpress >/dev/null 2>/dev/null");
   system("/home/pi/rpidatv/scripts/vlc_stream_player_stop.sh &");
-  system("pkill -9 -f iss_track.py");
   printf("Terminate\n");
   setBackColour(0, 0, 0);
   clearScreen();
@@ -30930,8 +29876,6 @@ terminate(int dummy)
 int main(int argc, char **argv)
 {
   int NoDeviceEvent=0;
-  wscreen = 800;
-  hscreen = 480;
   int screenXmax, screenXmin;
   int screenYmax, screenYmin;
   int i;
@@ -30943,11 +29887,13 @@ int main(int argc, char **argv)
   char vcoding[256];
   char vsource[256];
 
+  if ( (jd = fopen(nom, "w")) == NULL)
+    printf("\nJournal PB\n");
+  
   strcpy(ProgramName, argv[0]);
 
   // Catch sigaction and call terminate
-  for (i = 0; i < 16; i++)
-  {
+  for (i = 0; i < 16; i++)  {
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = terminate;
@@ -30955,28 +29901,20 @@ int main(int argc, char **argv)
   }
 
   // Set up wiringPi module
-  if (wiringPiSetup() < 0)
-  {
+  if (wiringPiSetup() < 0)  {
     return 0;
   }
 
   // Check startup request
-  if (argc > 2 )
-  {
-	for ( i = 1; i < argc - 1; i += 2 )
-    {
-      if (strcmp(argv[i], "-b") == 0)
-      {
-        if (strcmp(argv[i + 1], "tx") == 0)
-        {
-          boot_to_tx = true;
-        }
-        else if (strcmp(argv[i + 1], "rx") == 0)
-        {
-          boot_to_rx = true;
-        }
+  if (argc > 2 )  {
+    for ( i = 1; i < argc - 1; i += 2 ) {
+      if (strcmp(argv[i], "-b") == 0) {
+        if (strcmp(argv[i + 1], "tx") == 0) {
+          boot_to_tx = true; }
         else
-        {
+	  if (strcmp(argv[i + 1], "rx") == 0) {
+	    boot_to_rx = true; }
+	  else {
           startupmenu = atoi(argv[i + 1] );
         }
       }
@@ -31005,40 +29943,43 @@ int main(int argc, char **argv)
   GetConfigParam(PATH_PCONFIG, "display", DisplayType);
 
   // Check for presence of touchscreen
-  for(NoDeviceEvent = 0; NoDeviceEvent < 7; NoDeviceEvent++)
-  {
-    if (openTouchScreen(NoDeviceEvent) == 1)
-    {
-      if(getTouchScreenDetails(&screenXmin,&screenXmax,&screenYmin,&screenYmax)==1) break;
+  for(NoDeviceEvent = 0; NoDeviceEvent < 7; NoDeviceEvent++)  {
+    if (openTouchScreen(NoDeviceEvent) == 1) {
+      if(getTouchScreenDetails(&screenXmin, &screenXmax,
+			       &screenYmin, &screenYmax) == 1) {
+	fprintf(jd, "Screen Xmin %u Xmax %u Ymin %u Ymax %u \n",
+		screenXmin, screenXmax, screenYmin, screenYmax);
+	break; }
     }
   }
 
-  if(NoDeviceEvent != 7)  // Touchscreen detected
-  {
+  if(NoDeviceEvent != 7) {  // Touchscreen detected
     touchscreen_present = true;
 
     // Create Touchscreen thread
     pthread_create (&thtouchscreen, NULL, &WaitTouchscreenEvent, NULL);
 
     // If display previously set to Browser or hdmi, correct it
-    if ((strcmp(DisplayType, "Browser") == 0) || (strcmp(DisplayType, "hdmi") == 0)
-     || (strcmp(DisplayType, "hdmi480") == 0) || (strcmp(DisplayType, "hdmi720") == 0)
-     || (strcmp(DisplayType, "hdmi1080") == 0))
-    {
+    if ((strcmp(DisplayType, "Browser") == 0)
+	|| (strcmp(DisplayType, "hdmi") == 0)
+	|| (strcmp(DisplayType, "hdmi480") == 0)
+	|| (strcmp(DisplayType, "hdmi720") == 0)
+	|| (strcmp(DisplayType, "hdmi1080") == 0)) {
       SetConfigParam(PATH_PCONFIG, "webcontrol", "enabled");
       SetConfigParam(PATH_PCONFIG, "display", "Element14_7");
       system ("/home/pi/rpidatv/scripts/set_display_config.sh");
       system ("sudo reboot now");
     }
   }
-  else // No touchscreen detected, so enable webcontrol, change display type and reboot if required
-  {
+  else  {
+    // No touchscreen detected, so enable webcontrol, change display type and reboot if required
     touchscreen_present = false;
 
-    if ((strcmp(DisplayType, "Browser") != 0) && (strcmp(DisplayType, "hdmi") != 0)
-     && (strcmp(DisplayType, "hdmi480") != 0) && (strcmp(DisplayType, "hdmi720") != 0)
-     && (strcmp(DisplayType, "hdmi1080") != 0))
-    {
+    if ((strcmp(DisplayType, "Browser") != 0)
+	&& (strcmp(DisplayType, "hdmi") != 0)
+	&& (strcmp(DisplayType, "hdmi480") != 0)
+	&& (strcmp(DisplayType, "hdmi720") != 0)
+	&& (strcmp(DisplayType, "hdmi1080") != 0)) {
       SetConfigParam(PATH_PCONFIG, "webcontrol", "enabled");
       SetConfigParam(PATH_PCONFIG, "display", "hdmi720");         // Set 720p60 for maximum compatibility
       system ("/home/pi/rpidatv/scripts/set_display_config.sh");
@@ -31051,17 +29992,17 @@ int main(int argc, char **argv)
   system("sudo fbi -T 1 -noverbose -a \"/home/pi/rpidatv/scripts/images/BATC_Black.png\" >/dev/null 2>/dev/null");
   system("(sleep 1; sudo killall -9 fbi >/dev/null 2>/dev/null) &");
 
+  // Initialise direct access to the 7 inch screen
+  initScreen(&wscreen, &hscreen);
+  
   // Calculate screen parameters
   scaleXvalue = ((float)screenXmax-screenXmin) / wscreen;
   scaleYvalue = ((float)screenYmax-screenYmin) / hscreen;
 
   // Define button grid
   // -25 keeps right hand side symmetrical with left hand side
-  wbuttonsize=(wscreen-25)/5;
-  hbuttonsize=hscreen/6;
-
-  // Initialise direct access to the 7 inch screen
-  initScreen();
+  wbuttonsize = (wscreen - 25) / 5;
+  hbuttonsize = hscreen / 6;
 
   // Read in the presets from the Config files
   ReadPresets();
@@ -31087,7 +30028,6 @@ int main(int argc, char **argv)
   ReadVLCVolume();
   ReadWebControl();  // this starts the web listener thread if required
   ReadMerger();
-  ReadTracker();
   ReadDHCPConfig();
 
   SetAudioLevels();
@@ -31144,7 +30084,6 @@ int main(int argc, char **argv)
   Define_Menu46();
   Define_Menu47();
   Define_Menu48();
-  Define_Menu51();
 
   // Check if DATV Express Server required and, if so, start it
   CheckExpress();
@@ -31205,5 +30144,6 @@ int main(int argc, char **argv)
 
   // Not sure that the program flow ever gets here
 
+  fclose(jd);
   return 0;
 }

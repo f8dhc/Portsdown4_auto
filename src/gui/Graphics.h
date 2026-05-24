@@ -47,7 +47,7 @@ void setCursorPixel(int x, int y, int level);
 void draw_cursor2(int new_x, int new_y);
 void refreshMouseBackground(void);
 void draw_cursor_foreground(int x, int y);
-int initScreen(void);
+int initScreen(int *pWscreen, int *pHscreen);
 
 
 uint32_t font_width_string(const font_t *font_ptr, char *string)
@@ -344,6 +344,7 @@ void closeScreen(void)
 void setCursorPixel(int x, int y, int level)
 {
   int p;  // Pixel Memory offset
+   if ((x < screenXsize) && (y < screenYsize))
   {
     p=(x + screenXsize * y) * 4;
 
@@ -784,7 +785,7 @@ void draw_cursor_foreground(int x, int y)
 }
 
 
-int initScreen(void)
+int initScreen(int *pWscreen, int *pHscreen)
 {
 
   struct fb_var_screeninfo vinfo;
@@ -811,6 +812,11 @@ int initScreen(void)
   
   screenXsize=vinfo.xres;
   screenYsize=vinfo.yres;
+
+  *pWscreen = screenXsize + 1;
+  *pHscreen = screenYsize + 1;
+
+  // printf("\n Width x height %u x %u mm\n",vinfo.width, vinfo.height);
   
   screenSize = finfo.smem_len;
   fbp = (char*)mmap(0, screenSize, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
