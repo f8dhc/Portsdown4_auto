@@ -15,17 +15,19 @@ char *mfbp = 0;
 char *cfbp = 0;
 int fbfd = 0;
 long int screenSize = 0;
-int screenXsize=0;
-int screenYsize=0;
-int currentX=0;
-int currentY=0;
-int textSize=1;
-int foreColourR=0;
-int foreColourG=0;
-int foreColourB=0;
-int backColourR=0;
-int backColourG=0;
-int backColourB=0;
+int screenXsize = 0;
+int screenYsize = 0;
+int screenXmax = 0;
+int screenYmax = 0;
+int currentX = 0;
+int currentY = 0;
+int textSize = 1;
+int foreColourR = 0;
+int foreColourG = 0;
+int foreColourB = 0;
+int backColourR = 0;
+int backColourG = 0;
+int backColourB = 0;
 
 extern bool mouse_connected;
 
@@ -148,7 +150,7 @@ void displayLargeChar2(int sizeFactor, const font_t *font_ptr, char c)
         {
           pixelX = currentX + (col * sizeFactor) + extracol;
           pixelY = currentY + (row * sizeFactor) - y_offset + extrarow;
-          if ((pixelX < 800) && (pixelY < 480))
+          if ((pixelX < screenXsize) && (pixelY < screenYsize))
           {
              setPixel(pixelX, pixelY, thisPixelR, thisPixelG, thisPixelB);
           }
@@ -193,7 +195,7 @@ void Text2 (int xpos, int ypos, char*s, const font_t *font_ptr)
 
   // Position string write position start
 
-  gotoXY(xpos, 480 - ypos);
+  gotoXY(xpos, screenYsize - ypos);
 
   //printf("TextMid x %d, y %d, %s\n", xpos, ypos, s);
 
@@ -213,7 +215,7 @@ void LargeText2 (int xpos, int ypos, int sizeFactor, char*s, const font_t *font_
 
   // Position string write position start
 
-  gotoXY(xpos, 480 - ypos);
+  gotoXY(xpos, screenYsize - ypos);
 
   //printf("TextMid x %d, y %d, %s\n", xpos, ypos, s);
 
@@ -230,8 +232,8 @@ void LargeText2 (int xpos, int ypos, int sizeFactor, char*s, const font_t *font_
 
 void rectangle(int xpos, int ypos, int xsize, int ysize, int r, int g, int b)
 {
-  // xpos and y pos are 0 to screensize (screenYsize 799).  (0, 0) is bottom left
-  // xsize and ysize are 1 to 800 (x) or 480 (y)
+  // xpos and y pos are 0 to screensize (screenXmax or screenYmax).  (0, 0) is bottom left
+  // xsize and ysize are 1 to screenXsize (x) or screenYsize (y)
   int x;     // pixel count
   int y;     // pixel count
   int p;     // Pixel Memory offset
@@ -674,13 +676,13 @@ void draw_cursor_foreground(int x, int y)
   for (vert = 0; vert < 24; vert++)
   {
     ypixel = y - 24 + vert;
-    if ((ypixel >= 0) && (ypixel < 480))
+    if ((ypixel >= 0) && (ypixel <= screenYmax))
     {
 
       for (horiz = 0; horiz < 18; horiz++)
       {
         xpixel = x - 6  + horiz;
-        if ((xpixel >= 0) && (xpixel < 800))
+        if ((xpixel >= 0) && (xpixel <= screenXmax))
         {
           if ((vert == 23) && (horiz >= 5) && (horiz < 8))
           {
